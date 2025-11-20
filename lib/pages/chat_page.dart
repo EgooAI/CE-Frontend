@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import '../models/conversation.dart';
 import '../services/conversation_service.dart';
 
@@ -286,10 +287,37 @@ class _ChatPageState extends State<ChatPage> {
                                 color: isUser ? Colors.blue : Colors.grey[300],
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: Text(
-                                message.content,
-                                style: TextStyle(color: isUser ? Colors.white : Colors.black),
-                              ),
+                              child: isUser
+                                  ? Text(
+                                      message.content,
+                                      style: const TextStyle(color: Colors.white),
+                                    )
+                                  : MarkdownBody(
+                                      data: message.content,
+                                      styleSheet: MarkdownStyleSheet(
+                                        p: const TextStyle(color: Colors.black),
+                                        h1: const TextStyle(color: Colors.black, fontSize: 24, fontWeight: FontWeight.bold),
+                                        h2: const TextStyle(color: Colors.black, fontSize: 22, fontWeight: FontWeight.bold),
+                                        h3: const TextStyle(color: Colors.black, fontSize: 20, fontWeight: FontWeight.bold),
+                                        h4: const TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.bold),
+                                        h5: const TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.bold),
+                                        h6: const TextStyle(color: Colors.black, fontSize: 14, fontWeight: FontWeight.bold),
+                                        code: TextStyle(
+                                          backgroundColor: Colors.grey[200],
+                                          fontFamily: 'monospace',
+                                          color: Colors.black87,
+                                        ),
+                                        codeblockDecoration: BoxDecoration(
+                                          color: Colors.grey[200],
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        blockquote: const TextStyle(color: Colors.black87, fontStyle: FontStyle.italic),
+                                        listBullet: const TextStyle(color: Colors.black),
+                                        tableBody: const TextStyle(color: Colors.black),
+                                        a: const TextStyle(color: Colors.blue, decoration: TextDecoration.underline),
+                                      ),
+                                      selectable: true,
+                                    ),
                             ),
                           );
                         },
