@@ -39,21 +39,37 @@ class _MyAppState extends State<MyApp> {
     final isLoggedIn = await authService.initAuth();
 
     if (isLoggedIn) {
-      // 如果已登录，尝试获取用户信息
-      try {
-        final user = await authService.getProfile();
+      // 尝试先从本地缓存获取用户信息
+      final cachedUser = await authService.getUser();
+      if (cachedUser != null) {
         setState(() {
           _isLoggedIn = true;
-          _user = user;
+          _user = cachedUser;
           _isLoading = false;
         });
+      }
+
+      // 如果已登录，尝试获取最新用户信息
+      try {
+        final user = await authService.getProfile();
+        if (mounted) {
+          setState(() {
+            _isLoggedIn = true;
+            _user = user;
+            _isLoading = false;
+          });
+        }
       } catch (e) {
-        // 如果获取用户信息失败，清除token并跳转到登录页
-        await authService.logout();
-        setState(() {
-          _isLoggedIn = false;
-          _isLoading = false;
-        });
+        // 如果获取用户信息失败且没有缓存，清除token并跳转到登录页
+        if (cachedUser == null) {
+          await authService.logout();
+          if (mounted) {
+            setState(() {
+              _isLoggedIn = false;
+              _isLoading = false;
+            });
+          }
+        }
       }
     } else {
       setState(() {
