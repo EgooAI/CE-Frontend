@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-import 'home_page.dart';
+import 'main_page.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -41,7 +41,7 @@ class _RegisterPageState extends State<RegisterPage> {
           const SnackBar(content: Text('注册成功！')),
         );
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => HomePage(user: authResponse.user)),
+          MaterialPageRoute(builder: (context) => MainPage(user: authResponse.user)),
         );
       }
     } catch (e) {
