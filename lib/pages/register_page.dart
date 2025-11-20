@@ -41,7 +41,9 @@ class _RegisterPageState extends State<RegisterPage> {
           const SnackBar(content: Text('注册成功！')),
         );
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => MainPage(user: authResponse.user)),
+          MaterialPageRoute(builder: (context) => MainPage(
+            user: authResponse.user,
+          )),
         );
       }
     } catch (e) {

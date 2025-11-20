@@ -32,7 +32,9 @@ class _LoginPageState extends State<LoginPage> {
 
       if (mounted) {
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => MainPage(user: authResponse.user)),
+          MaterialPageRoute(builder: (context) => MainPage(
+            user: authResponse.user,
+          )),
         );
       }
     } catch (e) {

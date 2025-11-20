@@ -1,55 +1,95 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/auth_response.dart';
+import '../models/user.dart';
+import 'api_client.dart';
 
 class AuthService {
-  static const String baseUrl = 'http://localhost:8080'; // 根据后端地址调整
+  static const String _tokenKey = 'auth_token';
 
   Future<AuthResponse> login(String username, String password) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/login'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'username': username,
-        'password': password,
-      }),
-    );
+    try {
+      final response = await ApiClient.instance.post(
+        '/login',
+        data: {
+          'username': username,
+          'password': password,
+        },
+      );
 
-    if (response.statusCode == 200) {
-      return AuthResponse.fromJson(jsonDecode(response.body));
-    } else {
-      throw Exception('登录失败: ${response.body}');
+      if (response.statusCode == 200) {
+        final authResponse = AuthResponse.fromJson(response.data);
+        await _saveToken(authResponse.token);
+        ApiClient.setToken(authResponse.token);
+        return authResponse;
+      } else {
+        throw Exception('登录失败: ${response.data}');
+      }
+    } on DioException catch (e) {
+      throw Exception('登录失败: ${e.response?.data ?? e.message}');
     }
   }
 
   Future<AuthResponse> register(String email, String username, String password) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/register'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'email': email,
-        'username': username,
-        'password': password,
-      }),
-    );
+    try {
+      final response = await ApiClient.instance.post(
+        '/register',
+        data: {
+          'email': email,
+          'username': username,
+          'password': password,
+        },
+      );
 
-    if (response.statusCode == 201) {
-      return AuthResponse.fromJson(jsonDecode(response.body));
-    } else {
-      throw Exception('注册失败: ${response.body}');
+      if (response.statusCode == 201) {
+        final authResponse = AuthResponse.fromJson(response.data);
+        await _saveToken(authResponse.token);
+        ApiClient.setToken(authResponse.token);
+        return authResponse;
+      } else {
+        throw Exception('注册失败: ${response.data}');
+      }
+    } on DioException catch (e) {
+      throw Exception('注册失败: ${e.response?.data ?? e.message}');
     }
   }
 
-  Future<TokenResponse> refreshToken() async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/api/auth/refresh'),
-      headers: {'Content-Type': 'application/json'},
-    );
+  Future<void> logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_tokenKey);
+    ApiClient.clearToken();
+  }
 
-    if (response.statusCode == 200) {
-      return TokenResponse.fromJson(jsonDecode(response.body));
-    } else {
-      throw Exception('刷新token失败: ${response.body}');
+  Future<String?> getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_tokenKey);
+  }
+
+  Future<void> _saveToken(String token) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_tokenKey, token);
+  }
+  
+  Future<bool> initAuth() async {
+    final token = await getToken();
+    if (token != null) {
+      ApiClient.setToken(token);
+      return true;
+    }
+    return false;
+  }
+
+  Future<User> getProfile() async {
+    try {
+      final response = await ApiClient.instance.get('/profile');
+      if (response.statusCode == 200) {
+        final userData = response.data['user'];
+        return User.fromJson(userData);
+      } else {
+        throw Exception('获取用户信息失败: ${response.data}');
+      }
+    } on DioException catch (e) {
+      throw Exception('获取用户信息失败: ${e.response?.data ?? e.message}');
     }
   }
 }
