@@ -31,8 +31,10 @@ class _ChatPageState extends State<ChatPage> {
       final conversations = await _conversationService.getConversations();
       setState(() {
         _conversations = conversations;
-        // 如果没有选中对话且有对话列表，默认选中第一个（或者保持null等待用户选择）
-        // 这里我们保持null，显示欢迎页或空状态
+        // 如果没有对话，自动创建一个默认对话
+        if (_conversations.isEmpty && _currentConversation == null) {
+          _createDefaultConversation();
+        }
       });
     } catch (e) {
       if (mounted) {
@@ -43,15 +45,29 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  Future<void> _selectConversation(Conversation conversation) async {
+  Future<void> _createDefaultConversation() async {
+    try {
+      final conversation = await _conversationService.createConversation("默认对话");
+      setState(() {
+        _conversations.add(conversation);
+        _currentConversation = conversation;
+        _messages = [];
+      });
+    } catch (e) {
+      // 静默失败，不显示错误，因为这不是用户主动操作
+    }
+  }
+
+  Future<void> _selectConversation(Conversation conversation, {bool closeDrawer = false}) async {
     setState(() {
       _currentConversation = conversation;
       _messages = []; // 清空当前显示的消息
       _isLoading = true;
     });
     
-    // 关闭侧边栏
-    Navigator.pop(context);
+    if (closeDrawer) {
+      Navigator.pop(context);
+    }
 
     try {
       // 获取对话详情（包含消息）
@@ -77,7 +93,7 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  Future<void> _createNewConversation() async {
+  Future<void> _createNewConversation({bool closeDrawer = false}) async {
     try {
       final conversation = await _conversationService.createConversation("新对话");
       setState(() {
@@ -85,7 +101,9 @@ class _ChatPageState extends State<ChatPage> {
         _currentConversation = conversation;
         _messages = [];
       });
-      Navigator.pop(context); // 关闭侧边栏
+      if (closeDrawer) {
+        Navigator.pop(context); // 关闭侧边栏
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -98,8 +116,8 @@ class _ChatPageState extends State<ChatPage> {
   Future<void> _sendMessage() async {
     if (_controller.text.trim().isEmpty) return;
     if (_currentConversation == null) {
-      // 如果没有当前对话，先创建一个
-      await _createNewConversation();
+      // 如果没有当前对话，先创建一个默认对话
+      await _createDefaultConversation();
       if (_currentConversation == null) return;
     }
 
@@ -120,22 +138,6 @@ class _ChatPageState extends State<ChatPage> {
     _scrollToBottom();
 
     try {
-      // 发送消息并获取AI回复
-      // 注意：后端AddMessage接口返回的是AI的回复消息（根据之前的重构）
-      // 或者是用户的消息？让我们回顾一下后端代码。
-      // 后端AddMessage返回的是 `c.JSON(http.StatusCreated, aiMessage)`
-      // 所以我们直接把返回的消息加进去就是AI的回复。
-      // 但是用户的消息也需要保存到本地列表（虽然我们已经临时加了，但最好是用后端返回的确认）。
-      // 
-      // 实际上，后端逻辑是：
-      // 1. 保存用户消息
-      // 2. 调用LLM
-      // 3. 保存AI消息
-      // 4. 返回AI消息
-      // 
-      // 所以我们前端显示的"用户消息"是乐观更新的。
-      // 返回的"AI消息"是确定的。
-      
       final aiMessage = await _conversationService.sendMessage(_currentConversation!.id, content);
       
       if (mounted) {
@@ -198,7 +200,7 @@ class _ChatPageState extends State<ChatPage> {
             ListTile(
               leading: const Icon(Icons.add),
               title: const Text('新建对话'),
-              onTap: _createNewConversation,
+              onTap: () => _createNewConversation(closeDrawer: true),
             ),
             const Divider(),
             Expanded(
@@ -210,7 +212,7 @@ class _ChatPageState extends State<ChatPage> {
                     title: Text(conversation.title),
                     subtitle: Text(conversation.updatedAt.toString().split('.')[0]),
                     selected: _currentConversation?.id == conversation.id,
-                    onTap: () => _selectConversation(conversation),
+                    onTap: () => _selectConversation(conversation, closeDrawer: true),
                     trailing: IconButton(
                       icon: const Icon(Icons.delete, size: 16),
                       onPressed: () async {
