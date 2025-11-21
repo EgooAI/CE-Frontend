@@ -199,10 +199,7 @@ class _CalendarPageState extends State<CalendarPage> {
         markerBuilder: (context, date, events) {
           if (events.isNotEmpty) {
             // 只显示未完成的日程
-            final unfinishedEvents = events
-                .where((e) => e.shouldShowMarker())
-                .toList();
-            if (unfinishedEvents.isNotEmpty) {
+            if (events.any((e) => e.shouldShowMarker())) {
               return Positioned(
                 bottom: 1,
                 child: Container(
