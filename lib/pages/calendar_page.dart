@@ -272,26 +272,7 @@ class _CalendarPageState extends State<CalendarPage> {
   Future<void> _handleStatusChange(Schedule schedule, String newStatus) async {
     try {
       // 创建更新后的日程对象
-      final updatedSchedule = Schedule(
-        id: schedule.id,
-        userId: schedule.userId,
-        title: schedule.title,
-        description: schedule.description,
-        startTime: schedule.startTime,
-        endTime: schedule.endTime,
-        allDay: schedule.allDay,
-        location: schedule.location,
-        status: newStatus,
-        type: schedule.type,
-        priority: schedule.priority,
-        recurrence: schedule.recurrence,
-        participants: schedule.participants,
-        notes: schedule.notes,
-        attachments: schedule.attachments,
-        daomengId: schedule.daomengId,
-        createdAt: schedule.createdAt,
-        updatedAt: schedule.updatedAt,
-      );
+      final updatedSchedule = schedule.copyWith(status: newStatus);
 
       await _scheduleService.updateSchedule(
         schedule.id,
