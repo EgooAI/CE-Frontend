@@ -114,4 +114,25 @@ class AuthService {
       throw Exception('获取用户信息失败: ${e.response?.data ?? e.message}');
     }
   }
+
+  Future<User> updateEmail(String newEmail) async {
+    try {
+      final response = await ApiClient.instance.put(
+        '/profile',
+        data: {'email': newEmail},
+      );
+
+      if (response.statusCode == 200) {
+        // 更新成功后，重新获取完整的用户信息
+        return await getProfile();
+      } else {
+        throw Exception('更新邮箱失败: ${response.data}');
+      }
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 409) {
+        throw Exception('该邮箱已被使用');
+      }
+      throw Exception('更新邮箱失败: ${e.response?.data ?? e.message}');
+    }
+  }
 }

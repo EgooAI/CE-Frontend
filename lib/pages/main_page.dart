@@ -25,7 +25,7 @@ class _MainPageState extends State<MainPage> {
       const ChatPage(),
       const CalendarPage(),
       const TaskPage(),
-      ProfilePage(user: widget.user),
+      ProfilePage(initialUser: widget.user),
     ];
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'pages/login_page.dart';
 import 'pages/main_page.dart';
+import 'pages/edit_email_page.dart';
 import 'services/auth_service.dart';
 import 'models/user.dart';
 
@@ -96,6 +97,16 @@ class _MyAppState extends State<MyApp> {
       home: _isLoggedIn && _user != null
           ? MainPage(user: _user!)
           : const LoginPage(),
+      routes: {'/login': (context) => const LoginPage()},
+      onGenerateRoute: (settings) {
+        if (settings.name == '/edit-email') {
+          final user = settings.arguments as User;
+          return MaterialPageRoute(
+            builder: (context) => EditEmailPage(user: user),
+          );
+        }
+        return null;
+      },
     );
   }
 }
