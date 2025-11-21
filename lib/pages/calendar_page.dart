@@ -3,6 +3,7 @@ import 'package:table_calendar/table_calendar.dart';
 import '../models/schedule.dart';
 import '../services/schedule_service.dart';
 import '../widgets/schedule_card.dart';
+import '../widgets/create_schedule_bottom_sheet.dart';
 
 class CalendarPage extends StatefulWidget {
   const CalendarPage({super.key});
@@ -115,42 +116,258 @@ class _CalendarPageState extends State<CalendarPage> {
     });
   }
 
+  // 显示删除确认对话框
+  Future<void> _showDeleteConfirmDialog(Schedule schedule) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('确认删除'),
+        content: Text('确定要删除「${schedule.title}」吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      _handleDelete(schedule.id);
+    }
+  }
+
+  // 显示创建日程对话框
+  void _showCreateDialog() {
+    showCreateScheduleBottomSheet(
+      context,
+      initialDate: _selectedDay ?? DateTime.now(),
+      onSave: _handleCreate,
+    );
+  }
+
+  // 显示编辑日程对话框
+  void _showEditDialog(Schedule schedule) {
+    showCreateScheduleBottomSheet(
+      context,
+      existingSchedule: schedule,
+      onSave: (updatedSchedule) => _handleUpdate(schedule.id, updatedSchedule),
+    );
+  }
+
+  // 创建日程
+  Future<void> _handleCreate(Schedule schedule) async {
+    try {
+      await _scheduleService.createSchedule(schedule.toJson());
+
+      // 刷新列表
+      await _loadSchedules();
+
+      if (mounted) {
+        Future.microtask(() {
+          if (mounted) {
+            ScaffoldMessenger.of(context)
+              ..hideCurrentSnackBar()
+              ..showSnackBar(
+                const SnackBar(
+                  content: Text('日程已创建'),
+                  duration: Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('创建失败: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  // 更新日程
+  Future<void> _handleUpdate(String id, Schedule updatedSchedule) async {
+    try {
+      await _scheduleService.updateSchedule(id, updatedSchedule.toJson());
+
+      // 刷新列表
+      await _loadSchedules();
+
+      if (mounted) {
+        Future.microtask(() {
+          if (mounted) {
+            ScaffoldMessenger.of(context)
+              ..hideCurrentSnackBar()
+              ..showSnackBar(
+                const SnackBar(
+                  content: Text('日程已更新'),
+                  duration: Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('更新失败: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  // 删除日程
+  Future<void> _handleDelete(String id, {bool showSnackBar = true}) async {
+    try {
+      await _scheduleService.deleteSchedule(id);
+
+      // 刷新列表
+      await _loadSchedules();
+
+      if (mounted && showSnackBar) {
+        Future.microtask(() {
+          if (mounted) {
+            ScaffoldMessenger.of(context)
+              ..hideCurrentSnackBar()
+              ..showSnackBar(
+                const SnackBar(
+                  content: Text('日程已删除'),
+                  duration: Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('删除失败: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  // 更新日程状态
+  Future<void> _handleStatusChange(Schedule schedule, String newStatus) async {
+    try {
+      // 创建更新后的日程对象
+      final updatedSchedule = Schedule(
+        id: schedule.id,
+        userId: schedule.userId,
+        title: schedule.title,
+        description: schedule.description,
+        startTime: schedule.startTime,
+        endTime: schedule.endTime,
+        allDay: schedule.allDay,
+        location: schedule.location,
+        status: newStatus,
+        type: schedule.type,
+        priority: schedule.priority,
+        recurrence: schedule.recurrence,
+        participants: schedule.participants,
+        notes: schedule.notes,
+        attachments: schedule.attachments,
+        daomengId: schedule.daomengId,
+        createdAt: schedule.createdAt,
+        updatedAt: schedule.updatedAt,
+      );
+
+      await _scheduleService.updateSchedule(
+        schedule.id,
+        updatedSchedule.toJson(),
+      );
+
+      // 刷新列表
+      await _loadSchedules();
+
+      if (mounted) {
+        final statusText = newStatus == 'completed'
+            ? '已完成'
+            : newStatus == 'cancelled'
+            ? '已取消'
+            : '进行中';
+
+        Future.microtask(() {
+          if (mounted) {
+            ScaffoldMessenger.of(context)
+              ..hideCurrentSnackBar()
+              ..showSnackBar(
+                SnackBar(
+                  content: Text('已标记为$statusText'),
+                  duration: const Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('状态更新失败: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('日历'),
         actions: [
-          // 今天按钮
+          // 今天按钮（蓝色）
           TextButton(
             onPressed: _jumpToToday,
-            child: const Text('今天', style: TextStyle(color: Colors.white)),
+            style: TextButton.styleFrom(foregroundColor: Colors.blue[300]),
+            child: const Text(
+              '今天',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
           ),
-          // 新建按钮（预留）
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () {
-              // TODO: 实现创建日程功能
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('创建日程功能开发中...')));
-            },
-          ),
+          // 新建按钮
+          IconButton(icon: const Icon(Icons.add), onPressed: _showCreateDialog),
         ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _errorMessage != null
           ? _buildErrorView()
-          : Column(
-              children: [
-                // 日历视图
-                _buildCalendar(),
-
-                const Divider(height: 1),
-
+          : CustomScrollView(
+              slivers: [
+                // 日历视图（可滚动）
+                SliverToBoxAdapter(
+                  child: Column(
+                    children: [_buildCalendar(), const Divider(height: 40)],
+                  ),
+                ),
                 // 日程列表
-                Expanded(child: _buildScheduleList()),
+                _buildScheduleList(),
               ],
             ),
     );
@@ -159,6 +376,10 @@ class _CalendarPageState extends State<CalendarPage> {
   // 构建日历组件
   Widget _buildCalendar() {
     return TableCalendar<Schedule>(
+      // 本地化设置
+      locale: 'zh_CN',
+      // 性能优化：缓存日程加载结果
+      startingDayOfWeek: StartingDayOfWeek.monday,
       firstDay: DateTime.utc(2020, 1, 1),
       lastDay: DateTime.utc(2030, 12, 31),
       focusedDay: _focusedDay,
@@ -176,29 +397,63 @@ class _CalendarPageState extends State<CalendarPage> {
       },
       // 样式配置
       calendarStyle: CalendarStyle(
+        // 今天的日期用淡蓝色
         todayDecoration: BoxDecoration(
-          color: Colors.blue[300],
+          color: Colors.blue[100],
           shape: BoxShape.circle,
         ),
+        todayTextStyle: const TextStyle(
+          color: Colors.black,
+          fontWeight: FontWeight.bold,
+        ),
+        // 选中的日期用蓝色
         selectedDecoration: const BoxDecoration(
           color: Colors.blue,
           shape: BoxShape.circle,
         ),
+        selectedTextStyle: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+        ),
+        // 其他日期无装饰
+        defaultDecoration: const BoxDecoration(),
+        defaultTextStyle: const TextStyle(color: Colors.black87),
+        weekendDecoration: const BoxDecoration(),
+        weekendTextStyle: TextStyle(color: Colors.red[300]),
+        outsideDecoration: const BoxDecoration(),
+        outsideTextStyle: const TextStyle(color: Colors.grey),
+        disabledDecoration: const BoxDecoration(),
+        disabledTextStyle: const TextStyle(color: Colors.grey),
+        holidayDecoration: const BoxDecoration(),
         markerDecoration: const BoxDecoration(
           color: Colors.red,
           shape: BoxShape.circle,
         ),
         markersMaxCount: 1,
+        canMarkersOverflow: false,
       ),
+      daysOfWeekStyle: const DaysOfWeekStyle(decoration: BoxDecoration()),
       headerStyle: const HeaderStyle(
         formatButtonVisible: false,
         titleCentered: true,
       ),
-      // 自定义标记（红点）
+      // 自定义日期单元格构建器，完全禁用点击反馈
       calendarBuilders: CalendarBuilders(
+        // 自定义默认日期单元格
+        defaultBuilder: (context, day, focusedDay) {
+          return _buildDateCell(day, false, false);
+        },
+        // 自定义今天的单元格
+        todayBuilder: (context, day, focusedDay) {
+          return _buildDateCell(day, true, false);
+        },
+        // 自定义选中的单元格
+        selectedBuilder: (context, day, focusedDay) {
+          return _buildDateCell(day, false, true);
+        },
+        // 自定义标记（红点）
         markerBuilder: (context, date, events) {
           if (events.isNotEmpty) {
-            // 只显示未完成的日程
             if (events.any((e) => e.shouldShowMarker())) {
               return Positioned(
                 bottom: 1,
@@ -219,20 +474,48 @@ class _CalendarPageState extends State<CalendarPage> {
     );
   }
 
+  // 构建日期单元格（带轻微点击动画）
+  Widget _buildDateCell(DateTime day, bool isToday, bool isSelected) {
+    Color? backgroundColor;
+    Color textColor = Colors.black87;
+    FontWeight fontWeight = FontWeight.normal;
+
+    if (isSelected) {
+      backgroundColor = Colors.blue;
+      textColor = Colors.white;
+      fontWeight = FontWeight.bold;
+    } else if (isToday) {
+      backgroundColor = Colors.blue[100];
+      fontWeight = FontWeight.bold;
+    }
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      margin: const EdgeInsets.all(4),
+      decoration: BoxDecoration(color: backgroundColor, shape: BoxShape.circle),
+      child: Center(
+        child: Text(
+          '${day.day}',
+          style: TextStyle(color: textColor, fontWeight: fontWeight),
+        ),
+      ),
+    );
+  }
+
   // 构建日程列表
   Widget _buildScheduleList() {
     if (_selectedDay == null) {
-      return const Center(child: Text('请选择日期'));
+      return SliverFillRemaining(child: const Center(child: Text('请选择日期')));
     }
 
     final schedules = _getSchedulesForDay(_selectedDay!);
 
     if (schedules.isEmpty) {
-      return _buildEmptyState();
+      return SliverFillRemaining(child: _buildEmptyState());
     }
 
-    return Column(
-      children: [
+    return SliverList(
+      delegate: SliverChildListDelegate([
         // 列表标题
         Container(
           padding: const EdgeInsets.all(12),
@@ -267,21 +550,23 @@ class _CalendarPageState extends State<CalendarPage> {
         ),
 
         // 日程卡片列表
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            itemCount: schedules.length,
-            itemBuilder: (context, index) {
-              final schedule = schedules[index];
-              return ScheduleCard(
-                schedule: schedule,
-                isExpanded: _expandedScheduleIds.contains(schedule.id),
-                onTap: () => _toggleScheduleExpanded(schedule.id),
-              );
-            },
-          ),
-        ),
-      ],
+        ...schedules.map((schedule) {
+          final isExpanded = _expandedScheduleIds.contains(schedule.id);
+
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: ScheduleCard(
+              schedule: schedule,
+              isExpanded: isExpanded,
+              onTap: () => _toggleScheduleExpanded(schedule.id),
+              onStatusChanged: (newStatus) =>
+                  _handleStatusChange(schedule, newStatus),
+              onEdit: () => _showEditDialog(schedule),
+              onDelete: () => _showDeleteConfirmDialog(schedule),
+            ),
+          );
+        }),
+      ]),
     );
   }
 
@@ -299,12 +584,7 @@ class _CalendarPageState extends State<CalendarPage> {
           ),
           const SizedBox(height: 16),
           ElevatedButton.icon(
-            onPressed: () {
-              // TODO: 实现创建日程功能
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('创建日程功能开发中...')));
-            },
+            onPressed: _showCreateDialog,
             icon: const Icon(Icons.add),
             label: const Text('创建日程'),
           ),

@@ -41,6 +41,7 @@ class _MainPageState extends State<MainPage> {
           });
         },
         type: BottomNavigationBarType.fixed, // 确保显示所有标签和图标
+        // enableFeedback: false, // 禁用触觉反馈
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.chat), label: '聊天'),
           BottomNavigationBarItem(

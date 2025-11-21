@@ -4,7 +4,7 @@ class Schedule {
   final String title;
   final String? description;
   final DateTime startTime;
-  final DateTime endTime;
+  final DateTime? endTime; // 结束时间可选
   final bool allDay;
   final String? location;
   final String status; // pending/in_progress/completed/cancelled
@@ -24,7 +24,7 @@ class Schedule {
     required this.title,
     this.description,
     required this.startTime,
-    required this.endTime,
+    this.endTime, // 结束时间可选
     required this.allDay,
     this.location,
     required this.status,
@@ -40,13 +40,18 @@ class Schedule {
   });
 
   factory Schedule.fromJson(Map<String, dynamic> json) {
+    // DateTime.parse() 会将带时区的时间转换为 UTC
+    // 需要使用 .toLocal() 转换回本地时区，保持正确的日期
     return Schedule(
       id: json['id'],
       userId: json['userId'],
       title: json['title'],
       description: json['description'],
-      startTime: DateTime.parse(json['startTime']),
-      endTime: DateTime.parse(json['endTime']),
+      // 转换为本地时区，确保日期正确
+      startTime: DateTime.parse(json['startTime']).toLocal(),
+      endTime: json['endTime'] != null
+          ? DateTime.parse(json['endTime']).toLocal()
+          : null,
       allDay: json['allDay'] ?? false,
       location: json['location'],
       status: json['status'] ?? 'pending',
@@ -58,22 +63,43 @@ class Schedule {
       attachments: json['attachments'],
       daomengId: json['daomengId'],
       createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'])
+          ? DateTime.parse(json['createdAt']).toLocal()
           : null,
       updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'])
+          ? DateTime.parse(json['updatedAt']).toLocal()
           : null,
     );
   }
 
   Map<String, dynamic> toJson() {
+    // 格式化为 RFC3339 格式（带时区偏移量）
+    String formatDateTime(DateTime dt) {
+      // 使用本地时间并添加时区偏移量 +08:00
+      final offset = dt.timeZoneOffset;
+      final offsetHours = offset.inHours.toString().padLeft(2, '0');
+      final offsetMinutes = (offset.inMinutes % 60).abs().toString().padLeft(
+        2,
+        '0',
+      );
+      final sign = offset.isNegative ? '-' : '+';
+
+      final year = dt.year.toString().padLeft(4, '0');
+      final month = dt.month.toString().padLeft(2, '0');
+      final day = dt.day.toString().padLeft(2, '0');
+      final hour = dt.hour.toString().padLeft(2, '0');
+      final minute = dt.minute.toString().padLeft(2, '0');
+      final second = dt.second.toString().padLeft(2, '0');
+
+      return '$year-$month-${day}T$hour:$minute:$second$sign$offsetHours:$offsetMinutes';
+    }
+
     return {
       'id': id,
       'userId': userId,
       'title': title,
       'description': description,
-      'startTime': startTime.toIso8601String(),
-      'endTime': endTime.toIso8601String(),
+      'startTime': formatDateTime(startTime),
+      if (endTime != null) 'endTime': formatDateTime(endTime!),
       'allDay': allDay,
       'location': location,
       'status': status,
@@ -84,8 +110,8 @@ class Schedule {
       'notes': notes,
       'attachments': attachments,
       'daomengId': daomengId,
-      'createdAt': createdAt?.toIso8601String(),
-      'updatedAt': updatedAt?.toIso8601String(),
+      'createdAt': createdAt != null ? formatDateTime(createdAt!) : null,
+      'updatedAt': updatedAt != null ? formatDateTime(updatedAt!) : null,
     };
   }
 
@@ -99,8 +125,13 @@ class Schedule {
     if (allDay) {
       return '全天';
     }
-    final startStr = '${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}';
-    final endStr = '${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}';
+    final startStr =
+        '${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}';
+    if (endTime == null) {
+      return startStr;
+    }
+    final endStr =
+        '${endTime!.hour.toString().padLeft(2, '0')}:${endTime!.minute.toString().padLeft(2, '0')}';
     return '$startStr-$endStr';
   }
 
