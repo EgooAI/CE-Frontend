@@ -118,24 +118,24 @@ class ScheduleCard extends StatelessWidget {
 
     switch (schedule.status) {
       case 'in_progress':
-        backgroundColor = Colors.blue[50]!;
-        textColor = Colors.blue[700]!;
+        backgroundColor = Colors.blue[50] ?? Colors.blue.shade50;
+        textColor = Colors.blue[700] ?? Colors.blue.shade700;
         break;
       case 'pending':
-        backgroundColor = Colors.grey[200]!;
-        textColor = Colors.grey[700]!;
+        backgroundColor = Colors.grey[200] ?? Colors.grey.shade200;
+        textColor = Colors.grey[700] ?? Colors.grey.shade700;
         break;
       case 'completed':
-        backgroundColor = Colors.green[50]!;
-        textColor = Colors.green[700]!;
+        backgroundColor = Colors.green[50] ?? Colors.green.shade50;
+        textColor = Colors.green[700] ?? Colors.green.shade700;
         break;
       case 'cancelled':
-        backgroundColor = Colors.red[50]!;
-        textColor = Colors.red[700]!;
+        backgroundColor = Colors.red[50] ?? Colors.red.shade50;
+        textColor = Colors.red[700] ?? Colors.red.shade700;
         break;
       default:
-        backgroundColor = Colors.grey[200]!;
-        textColor = Colors.grey[700]!;
+        backgroundColor = Colors.grey[200] ?? Colors.grey.shade200;
+        textColor = Colors.grey[700] ?? Colors.grey.shade700;
     }
 
     return Container(
