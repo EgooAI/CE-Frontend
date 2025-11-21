@@ -75,6 +75,7 @@ class _LoginPageState extends State<LoginPage> {
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.person),
                   ),
+                  textInputAction: TextInputAction.next,
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return '请输入用户名或邮箱';
@@ -91,6 +92,8 @@ class _LoginPageState extends State<LoginPage> {
                     prefixIcon: Icon(Icons.lock),
                   ),
                   obscureText: true,
+                  textInputAction: TextInputAction.done,
+                  onFieldSubmitted: (_) => _login(),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return '请输入密码';
