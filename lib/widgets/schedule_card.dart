@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/schedule.dart';
 
@@ -26,9 +27,11 @@ class ScheduleCard extends StatefulWidget {
 class _ScheduleCardState extends State<ScheduleCard> {
   String? _pendingAction; // 'completed', 'cancelled', 'in_progress'
   bool _isConfirming = false;
+  Timer? _confirmationTimer;
 
   // 第一次点击：显示确认按钮
   void _handleFirstClick(String action) {
+    _confirmationTimer?.cancel(); // Cancel previous timer
     setState(() {
       _pendingAction = action;
       _isConfirming = true;
@@ -43,8 +46,8 @@ class _ScheduleCardState extends State<ScheduleCard> {
     );
 
     // 3秒后自动取消确认状态
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted && _isConfirming) {
+    _confirmationTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) {
         setState(() {
           _pendingAction = null;
           _isConfirming = false;
@@ -513,5 +516,11 @@ class _ScheduleCardState extends State<ScheduleCard> {
       default:
         return Colors.grey;
     }
+  }
+
+  @override
+  void dispose() {
+    _confirmationTimer?.cancel();
+    super.dispose();
   }
 }
