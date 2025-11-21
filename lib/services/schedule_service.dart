@@ -7,7 +7,7 @@ class ScheduleService {
   Future<List<Schedule>> getSchedules() async {
     try {
       final response = await ApiClient.instance.get('/schedules');
-      
+
       if (response.statusCode == 200) {
         final List<dynamic> data = response.data as List;
         return data.map((json) => Schedule.fromJson(json)).toList();
@@ -23,7 +23,7 @@ class ScheduleService {
   Future<Schedule> getSchedule(String id) async {
     try {
       final response = await ApiClient.instance.get('/schedules/$id');
-      
+
       if (response.statusCode == 200) {
         return Schedule.fromJson(response.data);
       } else {
@@ -41,7 +41,7 @@ class ScheduleService {
         '/schedules',
         data: scheduleData,
       );
-      
+
       if (response.statusCode == 201) {
         return Schedule.fromJson(response.data);
       } else {
@@ -53,13 +53,16 @@ class ScheduleService {
   }
 
   // 更新日程
-  Future<Schedule> updateSchedule(String id, Map<String, dynamic> scheduleData) async {
+  Future<Schedule> updateSchedule(
+    String id,
+    Map<String, dynamic> scheduleData,
+  ) async {
     try {
       final response = await ApiClient.instance.put(
         '/schedules/$id',
         data: scheduleData,
       );
-      
+
       if (response.statusCode == 200) {
         return Schedule.fromJson(response.data);
       } else {
@@ -74,7 +77,7 @@ class ScheduleService {
   Future<void> deleteSchedule(String id) async {
     try {
       final response = await ApiClient.instance.delete('/schedules/$id');
-      
+
       if (response.statusCode != 200 && response.statusCode != 204) {
         throw Exception('删除日程失败: ${response.data}');
       }

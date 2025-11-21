@@ -49,17 +49,15 @@ class ScheduleCard extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 schedule.getTimeDisplay(),
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[700],
-                ),
+                style: TextStyle(fontSize: 14, color: Colors.grey[700]),
               ),
 
               // 地点和状态
               const SizedBox(height: 4),
               Row(
                 children: [
-                  if (schedule.location != null && schedule.location!.isNotEmpty) ...[
+                  if (schedule.location != null &&
+                      schedule.location!.isNotEmpty) ...[
                     const Icon(Icons.location_on, size: 14, color: Colors.grey),
                     const SizedBox(width: 4),
                     Text(
@@ -161,17 +159,15 @@ class ScheduleCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // 描述
-        if (schedule.description != null && schedule.description!.isNotEmpty) ...[
+        if (schedule.description != null &&
+            schedule.description!.isNotEmpty) ...[
           const Row(
             children: [
               Icon(Icons.description, size: 16, color: Colors.grey),
               SizedBox(width: 8),
               Text(
                 '描述',
-                style: TextStyle(
-                  fontWeight: FontWeight.w500,
-                  fontSize: 14,
-                ),
+                style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
               ),
             ],
           ),
@@ -229,7 +225,8 @@ class ScheduleCard extends StatelessWidget {
         ],
 
         // 参与者
-        if (schedule.participants != null && schedule.participants!.isNotEmpty) ...[
+        if (schedule.participants != null &&
+            schedule.participants!.isNotEmpty) ...[
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -241,7 +238,10 @@ class ScheduleCard extends StatelessWidget {
                   children: [
                     const Text(
                       '参与者：',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                     Text(
                       schedule.participants!,
@@ -265,17 +265,15 @@ class ScheduleCard extends StatelessWidget {
                 '重复：',
                 style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
               ),
-              Text(
-                schedule.recurrence!,
-                style: const TextStyle(fontSize: 14),
-              ),
+              Text(schedule.recurrence!, style: const TextStyle(fontSize: 14)),
             ],
           ),
           const SizedBox(height: 8),
         ],
 
         // 附件
-        if (schedule.attachments != null && schedule.attachments!.isNotEmpty) ...[
+        if (schedule.attachments != null &&
+            schedule.attachments!.isNotEmpty) ...[
           Row(
             children: [
               const Icon(Icons.attach_file, size: 16, color: Colors.grey),
@@ -306,12 +304,12 @@ class ScheduleCard extends StatelessWidget {
                   children: [
                     const Text(
                       '备注：',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                    Text(
-                      schedule.notes!,
-                      style: const TextStyle(fontSize: 14),
-                    ),
+                    Text(schedule.notes!, style: const TextStyle(fontSize: 14)),
                   ],
                 ),
               ),
