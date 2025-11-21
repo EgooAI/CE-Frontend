@@ -490,6 +490,7 @@ class _ScheduleCardState extends State<ScheduleCard> {
                       widget.schedule.notes!,
                       style: const TextStyle(fontSize: 14),
                     ),
+                    Text(schedule.notes!, style: const TextStyle(fontSize: 14)),
                   ],
                 ),
               ),

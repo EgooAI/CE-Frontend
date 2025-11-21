@@ -131,38 +131,139 @@ class _ChatPageState extends State<ChatPage> {
     final content = _controller.text;
     _controller.clear();
 
+    // 添加临时用户消息
+    final tempUserMessage = Message(
+      id: 'temp_user_${DateTime.now().millisecondsSinceEpoch}',
+      role: 'user',
+      content: content,
+      conversationId: _currentConversation!.id,
+      createdAt: DateTime.now(),
+    );
+
     setState(() {
-      _messages.add(
-        Message(
-          id: 'temp_user_${DateTime.now().millisecondsSinceEpoch}',
-          role: 'user',
-          content: content,
-          conversationId: _currentConversation!.id,
-          createdAt: DateTime.now(),
-        ),
-      );
+      _messages.add(tempUserMessage);
       _isSending = true;
     });
 
     _scrollToBottom();
 
+    // 添加临时 AI 消息占位符
+    final tempAiMessageId = 'temp_ai_${DateTime.now().millisecondsSinceEpoch}';
+    final tempAiMessage = Message(
+      id: tempAiMessageId,
+      role: 'assistant',
+      content: '正在思考...',
+      conversationId: _currentConversation!.id,
+      createdAt: DateTime.now(),
+    );
+
+    setState(() {
+      _messages.add(tempAiMessage);
+    });
+
+    _scrollToBottom();
+
     try {
-      final aiMessage = await _conversationService.sendMessage(
+      // 使用流式接口
+      await for (final event in _conversationService.sendMessageStream(
         _currentConversation!.id,
         content,
-      );
+      )) {
+        if (!mounted) break;
 
-      if (mounted) {
-        setState(() {
-          _messages.add(aiMessage);
-        });
-        _scrollToBottom();
+        if (event.type == 'user_message') {
+          // 用真实的用户消息替换临时消息
+          final realUserMessage = event.data as Message;
+          setState(() {
+            final index = _messages.indexWhere(
+              (m) => m.id == tempUserMessage.id,
+            );
+            if (index != -1) {
+              _messages[index] = realUserMessage;
+            }
+          });
+        } else if (event.type == 'progress') {
+          // 更新进度信息
+          final progressData = event.data as Map<String, dynamic>;
+          setState(() {
+            final index = _messages.indexWhere((m) => m.id == tempAiMessageId);
+            if (index != -1) {
+              _messages[index] = Message(
+                id: tempAiMessageId,
+                role: 'assistant',
+                content: progressData['message'] ?? '正在思考...',
+                conversationId: _currentConversation!.id,
+                createdAt: DateTime.now(),
+              );
+            }
+          });
+        } else if (event.type == 'tool_call') {
+          // 显示工具调用信息
+          final toolData = event.data as Map<String, dynamic>;
+          setState(() {
+            final index = _messages.indexWhere((m) => m.id == tempAiMessageId);
+            if (index != -1) {
+              _messages[index] = Message(
+                id: tempAiMessageId,
+                role: 'assistant',
+                content: '正在使用工具: ${toolData['tool']}...',
+                conversationId: _currentConversation!.id,
+                createdAt: DateTime.now(),
+              );
+            }
+          });
+          _scrollToBottom();
+        } else if (event.type == 'tool_result') {
+          // 工具执行完成
+          final toolData = event.data as Map<String, dynamic>;
+          setState(() {
+            final index = _messages.indexWhere((m) => m.id == tempAiMessageId);
+            if (index != -1) {
+              _messages[index] = Message(
+                id: tempAiMessageId,
+                role: 'assistant',
+                content: '工具 ${toolData['tool']} 执行完成，正在生成回复...',
+                conversationId: _currentConversation!.id,
+                createdAt: DateTime.now(),
+              );
+            }
+          });
+          _scrollToBottom();
+        } else if (event.type == 'done') {
+          // AI 回复完成
+          final finalMessage = event.data as Message;
+          setState(() {
+            final index = _messages.indexWhere((m) => m.id == tempAiMessageId);
+            if (index != -1) {
+              _messages[index] = finalMessage;
+            }
+          });
+          _scrollToBottom();
+          break;
+        } else if (event.type == 'error') {
+          // 错误处理
+          final errorData = event.data as Map<String, dynamic>;
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('错误: ${errorData['message']}')),
+            );
+          }
+          // 移除临时 AI 消息
+          setState(() {
+            _messages.removeWhere((m) => m.id == tempAiMessageId);
+          });
+          break;
+        }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('发送消息失败: $e')));
+        // 移除临时 AI 消息
+        setState(() {
+          _messages.removeWhere((m) => m.id == tempAiMessageId);
+        });
       }
     } finally {
       if (mounted) {
