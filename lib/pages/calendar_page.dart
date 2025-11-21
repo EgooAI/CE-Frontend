@@ -486,7 +486,7 @@ class _CalendarPageState extends State<CalendarPage> {
   // 构建日程列表
   Widget _buildScheduleList() {
     if (_selectedDay == null) {
-      return SliverFillRemaining(child: const Center(child: Text('请选择日期')));
+      return SliverFillRemaining(child: Center(child: Text('请选择日期')));
     }
 
     final schedules = _getSchedulesForDay(_selectedDay!);
