@@ -16,7 +16,9 @@ class ConversationService {
         throw Exception('Failed to load conversations: ${response.data}');
       }
     } on DioException catch (e) {
-      throw Exception('Failed to load conversations: ${e.response?.data ?? e.message}');
+      throw Exception(
+        'Failed to load conversations: ${e.response?.data ?? e.message}',
+      );
     }
   }
 
@@ -33,7 +35,9 @@ class ConversationService {
         throw Exception('Failed to create conversation: ${response.data}');
       }
     } on DioException catch (e) {
-      throw Exception('Failed to create conversation: ${e.response?.data ?? e.message}');
+      throw Exception(
+        'Failed to create conversation: ${e.response?.data ?? e.message}',
+      );
     }
   }
 
@@ -47,7 +51,9 @@ class ConversationService {
         throw Exception('Failed to load conversation: ${response.data}');
       }
     } on DioException catch (e) {
-      throw Exception('Failed to load conversation: ${e.response?.data ?? e.message}');
+      throw Exception(
+        'Failed to load conversation: ${e.response?.data ?? e.message}',
+      );
     }
   }
 
@@ -55,10 +61,7 @@ class ConversationService {
     try {
       final response = await ApiClient.instance.post(
         '/conversations/$conversationId/messages',
-        data: {
-          'role': 'user',
-          'content': content,
-        },
+        data: {'role': 'user', 'content': content},
       );
 
       if (response.statusCode == 201) {
@@ -67,10 +70,12 @@ class ConversationService {
         throw Exception('Failed to send message: ${response.data}');
       }
     } on DioException catch (e) {
-      throw Exception('Failed to send message: ${e.response?.data ?? e.message}');
+      throw Exception(
+        'Failed to send message: ${e.response?.data ?? e.message}',
+      );
     }
   }
-  
+
   Future<void> deleteConversation(String id) async {
     try {
       final response = await ApiClient.instance.delete('/conversations/$id');
@@ -79,7 +84,9 @@ class ConversationService {
         throw Exception('Failed to delete conversation: ${response.data}');
       }
     } on DioException catch (e) {
-      throw Exception('Failed to delete conversation: ${e.response?.data ?? e.message}');
+      throw Exception(
+        'Failed to delete conversation: ${e.response?.data ?? e.message}',
+      );
     }
   }
 }

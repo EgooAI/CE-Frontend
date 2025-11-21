@@ -16,7 +16,9 @@ class User {
       id: json['id'],
       email: json['email'],
       username: json['username'],
-      createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt']) : null,
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'])
+          : null,
     );
   }
 

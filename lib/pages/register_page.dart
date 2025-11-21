@@ -21,9 +21,9 @@ class _RegisterPageState extends State<RegisterPage> {
     if (!_formKey.currentState!.validate()) return;
 
     if (_passwordController.text != _confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('两次输入的密码不一致')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('两次输入的密码不一致')));
       return;
     }
 
@@ -37,20 +37,20 @@ class _RegisterPageState extends State<RegisterPage> {
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('注册成功！')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('注册成功！')));
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => MainPage(
-            user: authResponse.user,
-          )),
+          MaterialPageRoute(
+            builder: (context) => MainPage(user: authResponse.user),
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('注册失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('注册失败: $e')));
       }
     } finally {
       if (mounted) {
@@ -73,10 +73,7 @@ class _RegisterPageState extends State<RegisterPage> {
               children: [
                 const Text(
                   '注册',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 48),
@@ -92,7 +89,9 @@ class _RegisterPageState extends State<RegisterPage> {
                     if (value == null || value.isEmpty) {
                       return '请输入邮箱';
                     }
-                    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                    if (!RegExp(
+                      r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                    ).hasMatch(value)) {
                       return '请输入有效的邮箱地址';
                     }
                     return null;
@@ -138,7 +137,9 @@ class _RegisterPageState extends State<RegisterPage> {
                     if (value.length < 8) {
                       return '密码至少8个字符';
                     }
-                    if (!RegExp(r'^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*#?&]+$').hasMatch(value)) {
+                    if (!RegExp(
+                      r'^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*#?&]+$',
+                    ).hasMatch(value)) {
                       return '密码必须包含字母和数字';
                     }
                     return null;

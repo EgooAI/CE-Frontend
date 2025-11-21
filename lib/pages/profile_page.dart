@@ -32,10 +32,7 @@ class ProfilePage extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const CircleAvatar(
-              radius: 50,
-              child: Icon(Icons.person, size: 50),
-            ),
+            const CircleAvatar(radius: 50, child: Icon(Icons.person, size: 50)),
             const SizedBox(height: 24),
             Text(
               user.username,
@@ -50,7 +47,9 @@ class ProfilePage extends StatelessWidget {
             ListTile(
               leading: const Icon(Icons.access_time),
               title: const Text('注册时间'),
-              subtitle: Text(user.createdAt != null ? user.createdAt.toString() : "未知"),
+              subtitle: Text(
+                user.createdAt != null ? user.createdAt.toString() : "未知",
+              ),
             ),
           ],
         ),

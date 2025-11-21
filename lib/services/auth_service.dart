@@ -13,10 +13,7 @@ class AuthService {
     try {
       final response = await ApiClient.instance.post(
         '/login',
-        data: {
-          'username': username,
-          'password': password,
-        },
+        data: {'username': username, 'password': password},
       );
 
       if (response.statusCode == 200) {
@@ -33,15 +30,15 @@ class AuthService {
     }
   }
 
-  Future<AuthResponse> register(String email, String username, String password) async {
+  Future<AuthResponse> register(
+    String email,
+    String username,
+    String password,
+  ) async {
     try {
       final response = await ApiClient.instance.post(
         '/register',
-        data: {
-          'email': email,
-          'username': username,
-          'password': password,
-        },
+        data: {'email': email, 'username': username, 'password': password},
       );
 
       if (response.statusCode == 201) {
@@ -92,7 +89,7 @@ class AuthService {
     }
     return null;
   }
-  
+
   Future<bool> initAuth() async {
     final token = await getToken();
     if (token != null) {

@@ -32,10 +32,7 @@ class _MainPageState extends State<MainPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _pages,
-      ),
+      body: IndexedStack(index: _currentIndex, children: _pages),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) {
@@ -45,22 +42,13 @@ class _MainPageState extends State<MainPage> {
         },
         type: BottomNavigationBarType.fixed, // 确保显示所有标签和图标
         items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.chat),
-            label: '聊天',
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.chat), label: '聊天'),
           BottomNavigationBarItem(
             icon: Icon(Icons.calendar_today),
             label: '日历',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.task),
-            label: '任务',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: '我的',
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.task), label: '任务'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: '我的'),
         ],
       ),
     );

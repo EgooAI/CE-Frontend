@@ -6,9 +6,7 @@ class CalendarPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('日历'),
-      ),
+      appBar: AppBar(title: const Text('日历')),
       body: const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
