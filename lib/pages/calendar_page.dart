@@ -265,9 +265,13 @@ class _CalendarPageState extends State<CalendarPage> {
   void _showSchedulesForDate(DateTime date, List<Schedule> schedules) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       builder: (context) {
         return Container(
           padding: const EdgeInsets.all(16),
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.7,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -284,11 +288,11 @@ class _CalendarPageState extends State<CalendarPage> {
                 const Center(
                   child: Padding(
                     padding: EdgeInsets.all(32),
-                    child: Text('当天没有日程', style: TextStyle(color: Colors.grey)),
+                    child: Text('当天没有日程', style: const TextStyle(color: Colors.grey)),
                   ),
                 )
               else
-                Expanded(
+                Flexible(
                   child: ListView.builder(
                     shrinkWrap: true,
                     itemCount: schedules.length,

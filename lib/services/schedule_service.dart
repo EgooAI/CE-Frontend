@@ -122,7 +122,7 @@ class ScheduleService {
     try {
       final response = await ApiClient.instance.delete('/schedules/$id');
 
-      if (response.statusCode != 200) {
+      if (response.statusCode != 200 && response.statusCode != 204) {
         throw Exception('Failed to delete schedule: ${response.data}');
       }
     } on DioException catch (e) {
