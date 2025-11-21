@@ -361,7 +361,6 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
                       _buildDescriptionField(),
                       const SizedBox(height: 16),
                       _buildNotesField(),
-                      _buildDescriptionField(),
                     ],
                   ),
                 ),
