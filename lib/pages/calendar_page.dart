@@ -32,6 +32,18 @@ class _CalendarPageState extends State<CalendarPage> {
     _loadSchedules();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 每次页面显示时重新加载日程
+    _loadSchedules();
+  }
+
+  // 公开的刷新方法，供外部调用
+  void refreshData() {
+    _loadSchedules();
+  }
+
   // 加载日程数据
   Future<void> _loadSchedules() async {
     setState(() {
