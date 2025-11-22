@@ -115,11 +115,11 @@ class AuthService {
     }
   }
 
-  Future<User> updateEmail(String newEmail) async {
+  Future<User> updateEmail(String newEmail, String currentPassword) async {
     try {
       final response = await ApiClient.instance.put(
         '/profile',
-        data: {'email': newEmail},
+        data: {'email': newEmail, 'currentPassword': currentPassword},
       );
 
       if (response.statusCode == 200) {
@@ -133,6 +133,53 @@ class AuthService {
         throw Exception('该邮箱已被使用');
       }
       throw Exception('更新邮箱失败: ${e.response?.data ?? e.message}');
+    }
+  }
+
+  Future<User> updateUsername(
+    String newUsername,
+    String currentPassword,
+  ) async {
+    try {
+      final response = await ApiClient.instance.put(
+        '/profile',
+        data: {'username': newUsername, 'currentPassword': currentPassword},
+      );
+
+      if (response.statusCode == 200) {
+        return await getProfile();
+      } else {
+        throw Exception('更新用户名失败: ${response.data}');
+      }
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 409) {
+        throw Exception('该用户名已被使用');
+      }
+      if (e.response?.statusCode == 401) {
+        throw Exception('密码错误');
+      }
+      throw Exception('更新用户名失败: ${e.response?.data ?? e.message}');
+    }
+  }
+
+  Future<void> updatePassword(
+    String currentPassword,
+    String newPassword,
+  ) async {
+    try {
+      final response = await ApiClient.instance.put(
+        '/profile',
+        data: {'password': newPassword, 'currentPassword': currentPassword},
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('更新密码失败: ${response.data}');
+      }
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401) {
+        throw Exception('当前密码错误');
+      }
+      throw Exception('更新密码失败: ${e.response?.data ?? e.message}');
     }
   }
 }

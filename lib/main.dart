@@ -4,6 +4,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'pages/login_page.dart';
 import 'pages/main_page.dart';
 import 'pages/edit_email_page.dart';
+import 'pages/edit_username_page.dart';
+import 'pages/edit_password_page.dart';
 import 'services/auth_service.dart';
 import 'models/user.dart';
 
@@ -122,6 +124,18 @@ class _MyAppState extends State<MyApp> {
           final user = settings.arguments as User;
           return MaterialPageRoute(
             builder: (context) => EditEmailPage(user: user),
+          );
+        }
+        if (settings.name == '/edit-username') {
+          final user = settings.arguments as User;
+          return MaterialPageRoute(
+            builder: (context) => EditUsernamePage(user: user),
+          );
+        }
+        if (settings.name == '/edit-password') {
+          final user = settings.arguments as User;
+          return MaterialPageRoute(
+            builder: (context) => EditPasswordPage(user: user),
           );
         }
         return null;

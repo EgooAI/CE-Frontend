@@ -2,19 +2,18 @@ import 'package:flutter/material.dart';
 import '../models/user.dart';
 import '../services/auth_service.dart';
 
-class EditEmailPage extends StatefulWidget {
+class EditUsernamePage extends StatefulWidget {
   final User user;
 
-  const EditEmailPage({super.key, required this.user});
+  const EditUsernamePage({super.key, required this.user});
 
   @override
-  State<EditEmailPage> createState() => _EditEmailPageState();
+  State<EditUsernamePage> createState() => _EditUsernamePageState();
 }
 
-class _EditEmailPageState extends State<EditEmailPage> {
+class _EditUsernamePageState extends State<EditUsernamePage> {
   final _formKey = GlobalKey<FormState>();
-  final _newEmailController = TextEditingController();
-  final _confirmEmailController = TextEditingController();
+  final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _authService = AuthService();
 
@@ -25,16 +24,13 @@ class _EditEmailPageState extends State<EditEmailPage> {
   @override
   void initState() {
     super.initState();
-    // 监听输入变化，控制保存按钮状态
-    _newEmailController.addListener(_updateSaveButtonState);
-    _confirmEmailController.addListener(_updateSaveButtonState);
+    _usernameController.addListener(_updateSaveButtonState);
     _passwordController.addListener(_updateSaveButtonState);
   }
 
   @override
   void dispose() {
-    _newEmailController.dispose();
-    _confirmEmailController.dispose();
+    _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -42,47 +38,33 @@ class _EditEmailPageState extends State<EditEmailPage> {
   void _updateSaveButtonState() {
     setState(() {
       _canSave =
-          _newEmailController.text.isNotEmpty &&
-          _confirmEmailController.text.isNotEmpty &&
+          _usernameController.text.isNotEmpty &&
           _passwordController.text.isNotEmpty &&
-          _newEmailController.text == _confirmEmailController.text &&
-          _newEmailController.text != widget.user.email;
+          _usernameController.text != widget.user.username;
     });
   }
 
-  String? _validateEmail(String? value) {
+  String? _validateUsername(String? value) {
     if (value == null || value.isEmpty) {
-      return '请输入邮箱';
+      return '请输入用户名';
     }
 
-    final emailRegex = RegExp(
-      r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
-    );
-
-    if (!emailRegex.hasMatch(value)) {
-      return '请输入有效的邮箱地址';
+    if (value.length < 2) {
+      return '用户名至少2个字符';
     }
 
-    if (value == widget.user.email) {
-      return '新邮箱不能与当前邮箱相同';
+    if (value.length > 50) {
+      return '用户名最多50个字符';
+    }
+
+    if (value == widget.user.username) {
+      return '新用户名不能与当前用户名相同';
     }
 
     return null;
   }
 
-  String? _validateConfirmEmail(String? value) {
-    if (value == null || value.isEmpty) {
-      return '请确认邮箱';
-    }
-
-    if (value != _newEmailController.text) {
-      return '两次输入的邮箱不一致';
-    }
-
-    return null;
-  }
-
-  Future<void> _saveEmail() async {
+  Future<void> _saveUsername() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -92,21 +74,20 @@ class _EditEmailPageState extends State<EditEmailPage> {
     });
 
     try {
-      final updatedUser = await _authService.updateEmail(
-        _newEmailController.text,
+      final updatedUser = await _authService.updateUsername(
+        _usernameController.text,
         _passwordController.text,
       );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('邮箱更新成功！下次登录请使用新邮箱'),
+            content: Text('用户名更新成功！'),
             backgroundColor: Colors.green,
-            duration: Duration(seconds: 3),
+            duration: Duration(seconds: 2),
           ),
         );
 
-        // 返回更新后的用户信息
         Navigator.pop(context, updatedUser);
       }
     } catch (e) {
@@ -132,7 +113,7 @@ class _EditEmailPageState extends State<EditEmailPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('修改邮箱'),
+        title: const Text('修改用户名'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
@@ -143,13 +124,13 @@ class _EditEmailPageState extends State<EditEmailPage> {
         child: ListView(
           padding: const EdgeInsets.all(16.0),
           children: [
-            // 当前邮箱显示
+            // 当前用户名显示
             Card(
               child: ListTile(
-                leading: const Icon(Icons.email_outlined),
-                title: const Text('当前邮箱'),
+                leading: const Icon(Icons.person_outline),
+                title: const Text('当前用户名'),
                 subtitle: Text(
-                  widget.user.email,
+                  widget.user.username,
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w500,
@@ -162,33 +143,16 @@ class _EditEmailPageState extends State<EditEmailPage> {
             const Divider(),
             const SizedBox(height: 24),
 
-            // 新邮箱输入
+            // 新用户名输入
             TextFormField(
-              controller: _newEmailController,
-              keyboardType: TextInputType.emailAddress,
+              controller: _usernameController,
               decoration: const InputDecoration(
-                labelText: '新邮箱',
-                hintText: '请输入新的邮箱地址',
-                prefixIcon: Icon(Icons.email),
+                labelText: '新用户名',
+                hintText: '请输入新的用户名',
+                prefixIcon: Icon(Icons.person),
                 border: OutlineInputBorder(),
               ),
-              validator: _validateEmail,
-              enabled: !_isLoading,
-            ),
-
-            const SizedBox(height: 16),
-
-            // 确认邮箱输入
-            TextFormField(
-              controller: _confirmEmailController,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
-                labelText: '确认新邮箱',
-                hintText: '请再次输入新邮箱',
-                prefixIcon: Icon(Icons.email),
-                border: OutlineInputBorder(),
-              ),
-              validator: _validateConfirmEmail,
+              validator: _validateUsername,
               enabled: !_isLoading,
             ),
 
@@ -227,7 +191,7 @@ class _EditEmailPageState extends State<EditEmailPage> {
 
             // 保存按钮
             ElevatedButton(
-              onPressed: _canSave && !_isLoading ? _saveEmail : null,
+              onPressed: _canSave && !_isLoading ? _saveUsername : null,
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
@@ -271,13 +235,11 @@ class _EditEmailPageState extends State<EditEmailPage> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  const Text('• 邮箱将用于登录和接收通知'),
+                  const Text('• 用户名将在应用中显示'),
                   const SizedBox(height: 4),
-                  const Text('• 请确保邮箱地址正确'),
+                  const Text('• 用户名长度为2-50个字符'),
                   const SizedBox(height: 4),
                   const Text('• 需要输入当前密码以确认身份'),
-                  const SizedBox(height: 4),
-                  const Text('• 修改后下次登录请使用新邮箱'),
                 ],
               ),
             ),
