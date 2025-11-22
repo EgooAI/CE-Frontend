@@ -112,7 +112,7 @@ class _ChatPageState extends State<ChatPage> {
         _currentConversation = conversation;
         _messages = [];
       });
-      if (closeDrawer) {
+      if (closeDrawer && mounted) {
         Navigator.pop(context); // 关闭侧边栏
       }
     } catch (e) {
@@ -630,6 +630,59 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
+  Future<void> _editConversationTitle(
+    Conversation conversation,
+    int index,
+  ) async {
+    final TextEditingController titleController = TextEditingController(
+      text: conversation.title,
+    );
+
+    final newTitle = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('编辑对话标题'),
+        content: TextField(
+          controller: titleController,
+          decoration: const InputDecoration(hintText: '输入新标题'),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(context, titleController.text.trim()),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+
+    if (newTitle != null &&
+        newTitle.isNotEmpty &&
+        newTitle != conversation.title) {
+      try {
+        final updatedConversation = await _conversationService
+            .updateConversationTitle(conversation.id, newTitle);
+        setState(() {
+          _conversations[index] = updatedConversation;
+          if (_currentConversation?.id == conversation.id) {
+            _currentConversation = updatedConversation;
+          }
+        });
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('更新标题失败: $e')));
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -675,49 +728,63 @@ class _ChatPageState extends State<ChatPage> {
                     selected: _currentConversation?.id == conversation.id,
                     onTap: () =>
                         _selectConversation(conversation, closeDrawer: true),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.delete, size: 16),
-                      onPressed: () async {
-                        // 确认删除
-                        final confirm = await showDialog<bool>(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: const Text('删除对话'),
-                            content: const Text('确定要删除这个对话吗？'),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, false),
-                                child: const Text('取消'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit, size: 16),
+                          onPressed: () =>
+                              _editConversationTitle(conversation, index),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete, size: 16),
+                          onPressed: () async {
+                            // 确认删除
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                title: const Text('删除对话'),
+                                content: const Text('确定要删除这个对话吗？'),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.pop(context, false),
+                                    child: const Text('取消'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.pop(context, true),
+                                    child: const Text('删除'),
+                                  ),
+                                ],
                               ),
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, true),
-                                child: const Text('删除'),
-                              ),
-                            ],
-                          ),
-                        );
-
-                        if (confirm == true) {
-                          try {
-                            await _conversationService.deleteConversation(
-                              conversation.id,
                             );
-                            setState(() {
-                              _conversations.removeAt(index);
-                              if (_currentConversation?.id == conversation.id) {
-                                _currentConversation = null;
-                                _messages = [];
+
+                            if (confirm == true) {
+                              try {
+                                await _conversationService.deleteConversation(
+                                  conversation.id,
+                                );
+                                setState(() {
+                                  _conversations.removeAt(index);
+                                  if (_currentConversation?.id ==
+                                      conversation.id) {
+                                    _currentConversation = null;
+                                    _messages = [];
+                                  }
+                                });
+                              } catch (e) {
+                                if (mounted) {
+                                  // ignore: use_build_context_synchronously
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('删除失败: $e')),
+                                  );
+                                }
                               }
-                            });
-                          } catch (e) {
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('删除失败: $e')),
-                              );
                             }
-                          }
-                        }
-                      },
+                          },
+                        ),
+                      ],
                     ),
                   );
                 },

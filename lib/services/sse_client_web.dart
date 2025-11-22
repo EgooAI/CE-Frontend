@@ -1,7 +1,7 @@
 // Web implementation using XHR streaming (works with POST)
 import 'dart:async';
 import 'dart:convert';
-// ignore: avoid_web_libraries_in_flutter
+// ignore: avoid_web_libraries_in_flutter, deprecated_member_use
 import 'dart:html' as html;
 
 Stream<Map<String, dynamic>> connectImpl(

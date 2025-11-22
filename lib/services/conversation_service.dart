@@ -94,6 +94,27 @@ class ConversationService {
     }
   }
 
+  Future<Conversation> updateConversationTitle(String id, String title) async {
+    try {
+      final response = await ApiClient.instance.put(
+        '/conversations/$id/title',
+        data: {'title': title},
+      );
+
+      if (response.statusCode == 200) {
+        return Conversation.fromJson(response.data);
+      } else {
+        throw Exception(
+          'Failed to update conversation title: ${response.data}',
+        );
+      }
+    } on DioException catch (e) {
+      throw Exception(
+        'Failed to update conversation title: ${e.response?.data ?? e.message}',
+      );
+    }
+  }
+
   // 流式发送消息
   Stream<StreamEvent> sendMessageStream(
     String conversationId,

@@ -19,7 +19,7 @@ class _CalendarPageState extends State<CalendarPage> {
   CalendarFormat _calendarFormat = CalendarFormat.month;
 
   Map<DateTime, List<Schedule>> _scheduleMap = {};
-  Set<String> _expandedScheduleIds = {};
+  final Set<String> _expandedScheduleIds = {};
 
   bool _isLoading = true;
   String? _errorMessage;
