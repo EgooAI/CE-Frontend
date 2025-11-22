@@ -35,6 +35,24 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  Future<void> _navigateToEditUsername() async {
+    final result = await Navigator.pushNamed(
+      context,
+      '/edit-username',
+      arguments: user,
+    );
+
+    if (result != null && result is User) {
+      setState(() {
+        user = result;
+      });
+    }
+  }
+
+  Future<void> _navigateToEditPassword() async {
+    await Navigator.pushNamed(context, '/edit-password', arguments: user);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -74,6 +92,26 @@ class _ProfilePageState extends State<ProfilePage> {
                 icon: const Icon(Icons.edit),
                 onPressed: _navigateToEditEmail,
                 tooltip: '修改邮箱',
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.person),
+              title: const Text('用户名'),
+              subtitle: Text(user.username),
+              trailing: IconButton(
+                icon: const Icon(Icons.edit),
+                onPressed: _navigateToEditUsername,
+                tooltip: '修改用户名',
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.lock),
+              title: const Text('密码'),
+              subtitle: const Text('••••••'),
+              trailing: IconButton(
+                icon: const Icon(Icons.edit),
+                onPressed: _navigateToEditPassword,
+                tooltip: '修改密码',
               ),
             ),
             ListTile(

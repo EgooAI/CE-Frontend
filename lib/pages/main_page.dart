@@ -16,29 +16,47 @@ class MainPage extends StatefulWidget {
 
 class _MainPageState extends State<MainPage> {
   int _currentIndex = 0;
-  late final List<Widget> _pages;
-
-  @override
-  void initState() {
-    super.initState();
-    _pages = [
-      const ChatPage(),
-      const CalendarPage(),
-      const TaskPage(),
-      ProfilePage(initialUser: widget.user),
-    ];
-  }
+  final List<GlobalKey<State>> _pageKeys = [
+    GlobalKey<State>(), // ChatPage
+    GlobalKey<State>(), // CalendarPage
+    GlobalKey<State>(), // TaskPage
+    GlobalKey<State>(), // ProfilePage
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(index: _currentIndex, children: _pages),
+      body: IndexedStack(
+        index: _currentIndex,
+        children: [
+          ChatPage(key: _pageKeys[0]),
+          CalendarPage(key: _pageKeys[1]),
+          TaskPage(key: _pageKeys[2]),
+          ProfilePage(key: _pageKeys[3], initialUser: widget.user),
+        ],
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) {
           setState(() {
             _currentIndex = index;
           });
+
+          // 切换到日历或任务页面时，触发数据刷新
+          if (index == 1) {
+            // 日历页面
+            final calendarState = _pageKeys[1].currentState;
+            if (calendarState != null && calendarState.mounted) {
+              // 使用反射或接口调用刷新方法
+              (calendarState as dynamic).refreshData?.call();
+            }
+          } else if (index == 2) {
+            // 任务页面
+            final taskState = _pageKeys[2].currentState;
+            if (taskState != null && taskState.mounted) {
+              (taskState as dynamic).refreshData?.call();
+            }
+          }
         },
         type: BottomNavigationBarType.fixed, // 确保显示所有标签和图标
         // enableFeedback: false, // 禁用触觉反馈

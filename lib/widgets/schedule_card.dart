@@ -96,6 +96,17 @@ class _ScheduleCardState extends State<ScheduleCard> {
         if (status != 'completed' && status != 'cancelled') ...[
           const SizedBox(width: 4),
 
+          // 开始按钮（仅待办状态显示）
+          if (status == 'pending')
+            _buildActionButton(
+              action: 'in_progress',
+              icon: Icons.play_arrow,
+              label: '开始',
+              color: Colors.blue,
+            ),
+
+          if (status == 'pending') const SizedBox(width: 4),
+
           // 完成按钮
           _buildActionButton(
             action: 'completed',
@@ -113,17 +124,6 @@ class _ScheduleCardState extends State<ScheduleCard> {
             label: '取消',
             color: Colors.red,
           ),
-
-          const SizedBox(width: 4),
-
-          // 开始按钮（仅待办状态显示）
-          if (status == 'pending')
-            _buildActionButton(
-              action: 'in_progress',
-              icon: Icons.play_arrow,
-              label: '开始',
-              color: Colors.blue,
-            ),
         ],
       ],
     );
@@ -490,7 +490,10 @@ class _ScheduleCardState extends State<ScheduleCard> {
                       widget.schedule.notes!,
                       style: const TextStyle(fontSize: 14),
                     ),
-                    Text(schedule.notes!, style: const TextStyle(fontSize: 14)),
+                    Text(
+                      widget.schedule.notes!,
+                      style: const TextStyle(fontSize: 14),
+                    ),
                   ],
                 ),
               ),

@@ -178,4 +178,47 @@ class Schedule {
         return null;
     }
   }
+
+  // 复制对象并修改指定字段
+  Schedule copyWith({
+    String? id,
+    String? userId,
+    String? title,
+    String? description,
+    DateTime? startTime,
+    DateTime? endTime,
+    bool? allDay,
+    String? location,
+    String? status,
+    String? type,
+    String? priority,
+    String? recurrence,
+    String? participants,
+    String? notes,
+    String? attachments,
+    String? daomengId,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
+    return Schedule(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      startTime: startTime ?? this.startTime,
+      endTime: endTime ?? this.endTime,
+      allDay: allDay ?? this.allDay,
+      location: location ?? this.location,
+      status: status ?? this.status,
+      type: type ?? this.type,
+      priority: priority ?? this.priority,
+      recurrence: recurrence ?? this.recurrence,
+      participants: participants ?? this.participants,
+      notes: notes ?? this.notes,
+      attachments: attachments ?? this.attachments,
+      daomengId: daomengId ?? this.daomengId,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
 }
