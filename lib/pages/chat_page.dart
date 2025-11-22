@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import '../models/conversation.dart';
@@ -18,6 +19,9 @@ class _ChatPageState extends State<ChatPage> {
   List<Conversation> _conversations = [];
   Conversation? _currentConversation;
   List<Message> _messages = [];
+  List<String> _streamingThoughts = []; // 流式思考过程
+  String _streamingContent = ''; // 流式内容
+  StreamSubscription? _streamSub;
   bool _isLoading = false;
   bool _isSending = false;
 
@@ -163,98 +167,188 @@ class _ChatPageState extends State<ChatPage> {
 
     _scrollToBottom();
 
+    // 清空思考过程和流式内容
+    _streamingThoughts = [];
+    _streamingContent = '';
+
     try {
       // 使用流式接口
-      await for (final event in _conversationService.sendMessageStream(
-        _currentConversation!.id,
-        content,
-      )) {
-        if (!mounted) break;
+      _streamSub?.cancel();
+      _streamSub = _conversationService
+          .sendMessageStream(_currentConversation!.id, content)
+          .listen(
+            (event) {
+              if (!mounted) return;
 
-        if (event.type == 'user_message') {
-          // 用真实的用户消息替换临时消息
-          final realUserMessage = event.data as Message;
-          setState(() {
-            final index = _messages.indexWhere(
-              (m) => m.id == tempUserMessage.id,
-            );
-            if (index != -1) {
-              _messages[index] = realUserMessage;
-            }
-          });
-        } else if (event.type == 'progress') {
-          // 更新进度信息
-          final progressData = event.data as Map<String, dynamic>;
-          setState(() {
-            final index = _messages.indexWhere((m) => m.id == tempAiMessageId);
-            if (index != -1) {
-              _messages[index] = Message(
-                id: tempAiMessageId,
-                role: 'assistant',
-                content: progressData['message'] ?? '正在思考...',
-                conversationId: _currentConversation!.id,
-                createdAt: DateTime.now(),
-              );
-            }
-          });
-        } else if (event.type == 'tool_call') {
-          // 显示工具调用信息
-          final toolData = event.data as Map<String, dynamic>;
-          setState(() {
-            final index = _messages.indexWhere((m) => m.id == tempAiMessageId);
-            if (index != -1) {
-              _messages[index] = Message(
-                id: tempAiMessageId,
-                role: 'assistant',
-                content: '正在使用工具: ${toolData['tool']}...',
-                conversationId: _currentConversation!.id,
-                createdAt: DateTime.now(),
-              );
-            }
-          });
-          _scrollToBottom();
-        } else if (event.type == 'tool_result') {
-          // 工具执行完成
-          final toolData = event.data as Map<String, dynamic>;
-          setState(() {
-            final index = _messages.indexWhere((m) => m.id == tempAiMessageId);
-            if (index != -1) {
-              _messages[index] = Message(
-                id: tempAiMessageId,
-                role: 'assistant',
-                content: '工具 ${toolData['tool']} 执行完成，正在生成回复...',
-                conversationId: _currentConversation!.id,
-                createdAt: DateTime.now(),
-              );
-            }
-          });
-          _scrollToBottom();
-        } else if (event.type == 'done') {
-          // AI 回复完成
-          final finalMessage = event.data as Message;
-          setState(() {
-            final index = _messages.indexWhere((m) => m.id == tempAiMessageId);
-            if (index != -1) {
-              _messages[index] = finalMessage;
-            }
-          });
-          _scrollToBottom();
-          break;
-        } else if (event.type == 'error') {
-          // 错误处理
-          final errorData = event.data as Map<String, dynamic>;
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('错误: ${errorData['message']}')),
-            );
-          }
-          // 移除临时 AI 消息
-          setState(() {
-            _messages.removeWhere((m) => m.id == tempAiMessageId);
-          });
-          break;
-        }
-      }
+              if (event.type == 'user_message') {
+                // 用真实的用户消息替换临时消息
+                final realUserMessage = event.data as Message;
+                setState(() {
+                  final index = _messages.indexWhere(
+                    (m) => m.id == tempUserMessage.id,
+                  );
+                  if (index != -1) {
+                    _messages[index] = realUserMessage;
+                  }
+                });
+              } else if (event.type == 'progress') {
+                // 添加进度到思考过程
+                final progressData = event.data as Map<String, dynamic>;
+                final progressMsg = progressData['message'] ?? '正在思考...';
+                setState(() {
+                  _streamingThoughts.add('💭 $progressMsg');
+                  // 更新临时消息显示思考过程
+                  final index = _messages.indexWhere(
+                    (m) => m.id == tempAiMessageId,
+                  );
+                  if (index != -1) {
+                    _messages[index] = Message(
+                      id: tempAiMessageId,
+                      role: 'assistant',
+                      content: _streamingThoughts.join('\n'),
+                      conversationId: _currentConversation!.id,
+                      createdAt: DateTime.now(),
+                    );
+                  }
+                });
+                _scrollToBottom();
+              } else if (event.type == 'tool_call') {
+                // 添加工具调用信息到思考过程
+                final toolData = event.data as Map<String, dynamic>;
+                final toolName = toolData['tool'] ?? 'unknown';
+                final toolArgs = toolData['args'] ?? '';
+                setState(() {
+                  _streamingThoughts.add('🔧 调用工具: $toolName');
+                  if (toolArgs.toString().isNotEmpty &&
+                      toolArgs.toString() != '{}') {
+                    _streamingThoughts.add('   参数: $toolArgs');
+                  }
+                  // 更新临时消息
+                  final index = _messages.indexWhere(
+                    (m) => m.id == tempAiMessageId,
+                  );
+                  if (index != -1) {
+                    _messages[index] = Message(
+                      id: tempAiMessageId,
+                      role: 'assistant',
+                      content: _streamingThoughts.join('\n'),
+                      conversationId: _currentConversation!.id,
+                      createdAt: DateTime.now(),
+                    );
+                  }
+                });
+                _scrollToBottom();
+              } else if (event.type == 'tool_result') {
+                // 添加工具执行结果到思考过程
+                final toolData = event.data as Map<String, dynamic>;
+                final toolName = toolData['tool'] ?? 'unknown';
+                final result = toolData['result'] ?? '';
+                setState(() {
+                  _streamingThoughts.add('✅ $toolName 执行完成');
+                  if (result.toString().isNotEmpty) {
+                    _streamingThoughts.add('   结果: $result');
+                  }
+                  // 更新临时消息
+                  final index = _messages.indexWhere(
+                    (m) => m.id == tempAiMessageId,
+                  );
+                  if (index != -1) {
+                    _messages[index] = Message(
+                      id: tempAiMessageId,
+                      role: 'assistant',
+                      content: _streamingThoughts.join('\n'),
+                      conversationId: _currentConversation!.id,
+                      createdAt: DateTime.now(),
+                    );
+                  }
+                });
+                _scrollToBottom();
+              } else if (event.type == 'content') {
+                // 流式接收LLM生成的内容块
+                final contentData = event.data as Map<String, dynamic>;
+                final chunk = contentData['chunk'] as String? ?? '';
+                _streamingContent += chunk;
+
+                setState(() {
+                  final index = _messages.indexWhere(
+                    (m) => m.id == tempAiMessageId,
+                  );
+                  if (index != -1) {
+                    // 显示思考过程 + 当前流式内容
+                    String displayContent = '';
+                    if (_streamingThoughts.isNotEmpty) {
+                      displayContent =
+                          '**思考过程:**\n```\n${_streamingThoughts.join('\n')}\n```\n\n---\n\n';
+                    }
+                    displayContent += _streamingContent;
+
+                    _messages[index] = Message(
+                      id: tempAiMessageId,
+                      role: 'assistant',
+                      content: displayContent,
+                      conversationId: _currentConversation!.id,
+                      createdAt: DateTime.now(),
+                    );
+                  }
+                });
+                _scrollToBottom();
+              } else if (event.type == 'done') {
+                // AI 回复完成，保存最终消息
+                final finalMessage = event.data as Message;
+                setState(() {
+                  final index = _messages.indexWhere(
+                    (m) => m.id == tempAiMessageId,
+                  );
+                  if (index != -1) {
+                    // 如果有思考过程，在最终消息前添加思考过程
+                    String finalContent = finalMessage.content;
+                    if (_streamingThoughts.isNotEmpty) {
+                      finalContent =
+                          '**思考过程:**\n```\n${_streamingThoughts.join('\n')}\n```\n\n---\n\n$finalContent';
+                    }
+                    _messages[index] = Message(
+                      id: finalMessage.id,
+                      role: finalMessage.role,
+                      content: finalContent,
+                      conversationId: finalMessage.conversationId,
+                      createdAt: finalMessage.createdAt,
+                      attachments: finalMessage.attachments,
+                      metadata: finalMessage.metadata,
+                    );
+                  }
+                  _streamingThoughts = [];
+                });
+                _scrollToBottom();
+                _streamSub?.cancel();
+              } else if (event.type == 'error') {
+                // 错误处理
+                final errorData = event.data as Map<String, dynamic>;
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('错误: ${errorData['message']}')),
+                  );
+                }
+                // 移除临时 AI 消息
+                setState(() {
+                  _messages.removeWhere((m) => m.id == tempAiMessageId);
+                  _streamingThoughts = [];
+                });
+                _streamSub?.cancel();
+              }
+            },
+            onError: (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text('流式发送失败: $e')));
+              }
+              setState(() => _isSending = false);
+            },
+            onDone: () {
+              if (mounted) setState(() => _isSending = false);
+            },
+            cancelOnError: true,
+          );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -263,6 +357,7 @@ class _ChatPageState extends State<ChatPage> {
         // 移除临时 AI 消息
         setState(() {
           _messages.removeWhere((m) => m.id == tempAiMessageId);
+          _streamingThoughts = [];
         });
       }
     } finally {

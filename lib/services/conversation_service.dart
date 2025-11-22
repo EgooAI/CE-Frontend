@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart';
-import 'package:http/http.dart' as http;
+import 'sse_client.dart';
 import '../models/conversation.dart';
 import 'api_client.dart';
 import 'auth_service.dart';
@@ -99,80 +99,67 @@ class ConversationService {
     String conversationId,
     String content,
   ) async* {
-    try {
-      final authService = AuthService();
-      final token = await authService.getToken();
+    final authService = AuthService();
+    final token = await authService.getToken();
 
-      if (token == null) {
-        throw Exception('No auth token found');
-      }
+    if (token == null) {
+      yield StreamEvent(type: 'error', data: {'message': 'No auth token'});
+      return;
+    }
 
-      final request = http.Request(
-        'POST',
-        Uri.parse(
-          'http://localhost:8080/api/conversations/$conversationId/messages/stream',
-        ),
-      );
+    final url =
+        'http://localhost:8080/api/conversations/$conversationId/messages/stream';
+    final headers = {
+      'Authorization': 'Bearer $token',
+      'Content-Type': 'application/json',
+    };
+    final body = json.encode({'role': 'user', 'content': content});
 
-      request.headers['Authorization'] = 'Bearer $token';
-      request.headers['Content-Type'] = 'application/json';
-      request.body = json.encode({'role': 'user', 'content': content});
+    // Use cross-platform SSE connector
+    await for (final ev in connect(url, headers, body)) {
+      final eventName = ev['event'] as String? ?? 'message';
+      final data = ev['data'];
 
-      final client = http.Client();
-      final response = await client.send(request);
-
-      if (response.statusCode != 200) {
-        throw Exception('Failed to send message: ${response.statusCode}');
-      }
-
-      String? currentEvent;
-      await for (final chunk in response.stream.transform(utf8.decoder)) {
-        // 解析 SSE 数据
-        final lines = chunk.split('\n');
-        for (final line in lines) {
-          if (line.startsWith('event:')) {
-            currentEvent = line.substring(6).trim();
-          } else if (line.startsWith('data:')) {
-            final data = line.substring(5).trim();
-            if (data.isEmpty || currentEvent == null) continue;
-
-            try {
-              final jsonData = json.decode(data);
-
-              // 根据事件类型解析数据
-              if (currentEvent == 'user_message') {
-                yield StreamEvent(
-                  type: 'user_message',
-                  data: Message.fromJson(jsonData),
-                );
-              } else if (currentEvent == 'progress') {
-                yield StreamEvent(type: 'progress', data: jsonData);
-              } else if (currentEvent == 'tool_call') {
-                yield StreamEvent(type: 'tool_call', data: jsonData);
-              } else if (currentEvent == 'tool_result') {
-                yield StreamEvent(type: 'tool_result', data: jsonData);
-              } else if (currentEvent == 'done') {
-                yield StreamEvent(
-                  type: 'done',
-                  data: Message.fromJson(jsonData),
-                );
-              } else if (currentEvent == 'error') {
-                yield StreamEvent(type: 'error', data: jsonData);
-              }
-
-              currentEvent = null; // 重置事件类型
-            } catch (e) {
-              // 跳过无法解析的数据
-              print('Error parsing SSE data: $e, data: $data');
-              continue;
-            }
+      try {
+        if (eventName == 'user_message') {
+          // data should be a map representing a Message
+          yield StreamEvent(
+            type: 'user_message',
+            data: Message.fromJson(Map<String, dynamic>.from(data)),
+          );
+        } else if (eventName == 'progress') {
+          yield StreamEvent(type: 'progress', data: data);
+        } else if (eventName == 'content') {
+          // streaming content chunk
+          yield StreamEvent(type: 'content', data: data);
+        } else if (eventName == 'tool_call') {
+          yield StreamEvent(type: 'tool_call', data: data);
+        } else if (eventName == 'tool_result') {
+          yield StreamEvent(type: 'tool_result', data: data);
+        } else if (eventName == 'done') {
+          // Streaming content character by character
+          yield StreamEvent(type: 'content', data: data);
+        } else if (eventName == 'done') {
+          // data is the final Message object
+          if (data is Map) {
+            yield StreamEvent(
+              type: 'done',
+              data: Message.fromJson(Map<String, dynamic>.from(data)),
+            );
+          } else {
+            yield StreamEvent(type: 'done', data: data);
           }
+        } else if (eventName == 'error') {
+          yield StreamEvent(type: 'error', data: data);
+        } else {
+          yield StreamEvent(type: 'message', data: data);
         }
+      } catch (e) {
+        yield StreamEvent(
+          type: 'error',
+          data: {'message': 'Parsing error: $e'},
+        );
       }
-
-      client.close();
-    } catch (e) {
-      yield StreamEvent(type: 'error', data: {'message': 'Stream error: $e'});
     }
   }
 }

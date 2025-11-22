@@ -7,12 +7,17 @@ import 'services/auth_service.dart';
 import 'models/user.dart';
 
 void main() async {
-  // 强制竖屏
   WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ]);
+
+  // 强制竖屏（仅在移动平台）
+  try {
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
+  } catch (e) {
+    // Web 平台不支持屏幕方向设置，忽略错误
+  }
 
   runApp(const MyApp());
 }
