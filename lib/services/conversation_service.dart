@@ -157,6 +157,9 @@ class ConversationService {
           yield StreamEvent(type: 'tool_call', data: data);
         } else if (eventName == 'tool_result') {
           yield StreamEvent(type: 'tool_result', data: data);
+        } else if (eventName == 'schedule_parsed') {
+          // AI 解析出的日程数据
+          yield StreamEvent(type: 'schedule_parsed', data: data);
         } else if (eventName == 'done') {
           // Streaming content character by character
           yield StreamEvent(type: 'content', data: data);

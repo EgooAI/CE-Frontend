@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import '../models/conversation.dart';
 import '../services/conversation_service.dart';
+import '../services/schedule_service.dart';
+import '../widgets/create_schedule_bottom_sheet.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
@@ -15,6 +17,7 @@ class _ChatPageState extends State<ChatPage> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final ConversationService _conversationService = ConversationService();
+  final ScheduleService _scheduleService = ScheduleService();
 
   List<Conversation> _conversations = [];
   Conversation? _currentConversation;
@@ -263,6 +266,10 @@ class _ChatPageState extends State<ChatPage> {
                   }
                 });
                 _scrollToBottom();
+              } else if (event.type == 'schedule_parsed') {
+                // AI 解析出日程数据，弹出确认对话框
+                final scheduleData = event.data as Map<String, dynamic>;
+                _handleScheduleParsed(scheduleData);
               } else if (event.type == 'content') {
                 // 流式接收LLM生成的内容块
                 final contentData = event.data as Map<String, dynamic>;
@@ -302,6 +309,12 @@ class _ChatPageState extends State<ChatPage> {
                   if (index != -1) {
                     // 如果有思考过程，在最终消息前添加思考过程
                     String finalContent = finalMessage.content;
+
+                    // 如果流式内容不为空，优先使用流式内容
+                    if (_streamingContent.isNotEmpty) {
+                      finalContent = _streamingContent;
+                    }
+
                     if (_streamingThoughts.isNotEmpty) {
                       finalContent =
                           '**思考过程:**\n```\n${_streamingThoughts.join('\n')}\n```\n\n---\n\n$finalContent';
@@ -317,6 +330,7 @@ class _ChatPageState extends State<ChatPage> {
                     );
                   }
                   _streamingThoughts = [];
+                  _streamingContent = ''; // 清空流式内容
                 });
                 _scrollToBottom();
                 _streamSub?.cancel();
@@ -377,6 +391,65 @@ class _ChatPageState extends State<ChatPage> {
         );
       }
     });
+  }
+
+  /// 处理 AI 解析出的日程数据
+  Future<void> _handleScheduleParsed(Map<String, dynamic> data) async {
+    if (!mounted) return;
+
+    // 显示日程创建底部抽屉
+    showCreateScheduleBottomSheet(
+      context,
+      initialData: data,
+      onSave: (schedule) async {
+        try {
+          // 调用 API 创建日程
+          await _scheduleService.createSchedule(schedule.toJson());
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('✅ 日程创建成功'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+
+            // 可选：询问用户是否跳转到日历页面
+            final shouldNavigate = await showDialog<bool>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('日程已创建'),
+                content: const Text('是否前往日历查看？'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('留在聊天'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('查看日历'),
+                  ),
+                ],
+              ),
+            );
+
+            if (shouldNavigate == true && mounted) {
+              // 跳转到日历页面（假设在 MainPage 的索引 0）
+              Navigator.of(context).popUntil((route) => route.isFirst);
+            }
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('❌ 创建日程失败: $e'),
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+        }
+      },
+    );
   }
 
   Widget _buildMessageContent(String content) {
@@ -688,6 +761,7 @@ class _ChatPageState extends State<ChatPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_currentConversation?.title ?? 'AI 助手'),
+        titleTextStyle: const TextStyle(fontSize: 20),
         leading: Builder(
           builder: (context) {
             return IconButton(
@@ -700,13 +774,39 @@ class _ChatPageState extends State<ChatPage> {
         ),
       ),
       drawer: Drawer(
+        width: 340,
+        backgroundColor: Colors.grey[100],
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.horizontal(right: Radius.circular(0)),
+        ),
         child: Column(
           children: [
-            UserAccountsDrawerHeader(
-              accountName: const Text("我的对话"),
-              accountEmail: null,
-              currentAccountPicture: const CircleAvatar(
-                child: Icon(Icons.chat),
+            // UserAccountsDrawerHeader(
+            //   accountName: const Text("我的对话"),
+            //   accountEmail: null,
+            //   currentAccountPicture: const CircleAvatar(
+            //     child: Icon(Icons.chat),
+            //   ),
+            // ),
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Container(
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey[400]!),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  children: const [
+                    Icon(Icons.search, color: Colors.grey),
+                    SizedBox(width: 8),
+                    Text('搜索...', style: TextStyle(color: Colors.grey)),
+                    Spacer(),
+                    Icon(Icons.edit_note, color: Colors.black54),
+                  ],
+                ),
               ),
             ),
             ListTile(
@@ -715,76 +815,89 @@ class _ChatPageState extends State<ChatPage> {
               onTap: () => _createNewConversation(closeDrawer: true),
             ),
             const Divider(),
+            const SizedBox(height: 8),
             Expanded(
               child: ListView.builder(
                 itemCount: _conversations.length,
                 itemBuilder: (context, index) {
                   final conversation = _conversations[index];
-                  return ListTile(
-                    title: Text(conversation.title),
-                    subtitle: Text(
-                      conversation.updatedAt.toString().split('.')[0],
-                    ),
-                    selected: _currentConversation?.id == conversation.id,
-                    onTap: () =>
-                        _selectConversation(conversation, closeDrawer: true),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.edit, size: 16),
-                          onPressed: () =>
-                              _editConversationTitle(conversation, index),
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Center(
+                      child: ListTile(
+                        title: Text(conversation.title),
+                        subtitle: Text(
+                          conversation.updatedAt.toString().split('.')[0],
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.delete, size: 16),
-                          onPressed: () async {
-                            // 确认删除
-                            final confirm = await showDialog<bool>(
-                              context: context,
-                              builder: (context) => AlertDialog(
-                                title: const Text('删除对话'),
-                                content: const Text('确定要删除这个对话吗？'),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () =>
-                                        Navigator.pop(context, false),
-                                    child: const Text('取消'),
+                        selected: _currentConversation?.id == conversation.id,
+                        selectedTileColor: Colors.black12,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        onTap: () => _selectConversation(
+                          conversation,
+                          closeDrawer: true,
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit, size: 16),
+                              onPressed: () =>
+                                  _editConversationTitle(conversation, index),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete, size: 16),
+                              onPressed: () async {
+                                // 确认删除
+                                final confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: const Text('删除对话'),
+                                    content: const Text('确定要删除这个对话吗？'),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, false),
+                                        child: const Text('取消'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, true),
+                                        child: const Text('删除'),
+                                      ),
+                                    ],
                                   ),
-                                  TextButton(
-                                    onPressed: () =>
-                                        Navigator.pop(context, true),
-                                    child: const Text('删除'),
-                                  ),
-                                ],
-                              ),
-                            );
-
-                            if (confirm == true) {
-                              try {
-                                await _conversationService.deleteConversation(
-                                  conversation.id,
                                 );
-                                setState(() {
-                                  _conversations.removeAt(index);
-                                  if (_currentConversation?.id ==
-                                      conversation.id) {
-                                    _currentConversation = null;
-                                    _messages = [];
+
+                                if (confirm == true) {
+                                  try {
+                                    await _conversationService
+                                        .deleteConversation(conversation.id);
+                                    setState(() {
+                                      _conversations.removeAt(index);
+                                      if (_currentConversation?.id ==
+                                          conversation.id) {
+                                        _currentConversation = null;
+                                        _messages = [];
+                                      }
+                                    });
+                                  } catch (e) {
+                                    if (mounted) {
+                                      // ignore: use_build_context_synchronously
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(content: Text('删除失败: $e')),
+                                      );
+                                    }
                                   }
-                                });
-                              } catch (e) {
-                                if (mounted) {
-                                  // ignore: use_build_context_synchronously
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('删除失败: $e')),
-                                  );
                                 }
-                              }
-                            }
-                          },
+                              },
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   );
                 },
@@ -837,6 +950,8 @@ class _ChatPageState extends State<ChatPage> {
               padding: EdgeInsets.all(8.0),
               child: LinearProgressIndicator(),
             ),
+
+          // 底部输入框
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: Row(
@@ -846,13 +961,25 @@ class _ChatPageState extends State<ChatPage> {
                     controller: _controller,
                     decoration: const InputDecoration(
                       hintText: '输入消息...',
-                      border: OutlineInputBorder(),
+                      hintStyle: TextStyle(fontSize: 16, color: Colors.black38),
+                      enabledBorder: const OutlineInputBorder(
+                        borderRadius: BorderRadius.all(Radius.circular(999)),
+                        borderSide: BorderSide(width: 1, color: Colors.black26),
+                      ),
+                      focusedBorder: const OutlineInputBorder(
+                        borderRadius: BorderRadius.all(Radius.circular(999)),
+                        borderSide: BorderSide(width: 1, color: Colors.black),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 8,
+                      ),
                     ),
                     onSubmitted: (_) => _sendMessage(),
                     enabled: !_isSending,
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 IconButton(
                   icon: const Icon(Icons.send),
                   onPressed: _isSending ? null : _sendMessage,

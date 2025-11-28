@@ -81,10 +81,12 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
       _notesController.text = data['notes'] ?? '';
       _participantsController.text = data['participants'] ?? '';
       if (data['startTime'] != null) {
-        _startTime = DateTime.parse(data['startTime']);
+        // DateTime.parse() 会将带时区的时间转换为 UTC
+        // 需要使用 .toLocal() 转换回本地时区，保持正确的日期
+        _startTime = DateTime.parse(data['startTime']).toLocal();
       }
       if (data['endTime'] != null) {
-        _endTime = DateTime.parse(data['endTime']);
+        _endTime = DateTime.parse(data['endTime']).toLocal();
       }
       _isAllDay = data['allDay'] ?? false;
       _status = data['status'] ?? 'pending';
@@ -611,6 +613,18 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
               ),
               selected: _type == 'event',
               onSelected: (_) => setState(() => _type = 'event'),
+            ),
+            ChoiceChip(
+              label: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.calendar_today, size: 16),
+                  SizedBox(width: 4),
+                  Text('日常'),
+                ],
+              ),
+              selected: _type == 'daily',
+              onSelected: (_) => setState(() => _type = 'daily'),
             ),
           ],
         ),

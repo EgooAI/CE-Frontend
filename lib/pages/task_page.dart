@@ -4,7 +4,7 @@ import '../services/schedule_service.dart';
 import '../widgets/schedule_card.dart';
 import '../widgets/create_schedule_bottom_sheet.dart';
 
-/// 任务页面：按状态管理任务（type='task'的日程）
+/// 任务页面：所有日程的集中显示管理
 class TaskPage extends StatefulWidget {
   const TaskPage({super.key});
 
