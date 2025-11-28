@@ -776,7 +776,7 @@ class _ChatPageState extends State<ChatPage> {
       drawer: Drawer(
         width: 340,
         backgroundColor: Colors.grey[100],
-        shape: RoundedRectangleBorder(
+        shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.horizontal(right: Radius.circular(0)),
         ),
         child: Column(
