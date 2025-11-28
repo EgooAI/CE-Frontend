@@ -761,7 +761,7 @@ class _ChatPageState extends State<ChatPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_currentConversation?.title ?? 'AI 助手'),
-        titleTextStyle: TextStyle(fontSize: 20),
+        titleTextStyle: const TextStyle(fontSize: 20),
         leading: Builder(
           builder: (context) {
             return IconButton(
