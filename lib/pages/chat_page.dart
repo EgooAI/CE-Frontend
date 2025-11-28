@@ -962,11 +962,11 @@ class _ChatPageState extends State<ChatPage> {
                     decoration: const InputDecoration(
                       hintText: '输入消息...',
                       hintStyle: TextStyle(fontSize: 16, color: Colors.black38),
-                      enabledBorder: OutlineInputBorder(
+                      enabledBorder: const OutlineInputBorder(
                         borderRadius: BorderRadius.all(Radius.circular(999)),
                         borderSide: BorderSide(width: 1, color: Colors.black26),
                       ),
-                      focusedBorder: OutlineInputBorder(
+                      focusedBorder: const OutlineInputBorder(
                         borderRadius: BorderRadius.all(Radius.circular(999)),
                         borderSide: BorderSide(width: 1, color: Colors.black),
                       ),
