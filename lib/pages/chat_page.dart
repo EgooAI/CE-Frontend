@@ -309,12 +309,12 @@ class _ChatPageState extends State<ChatPage> {
                   if (index != -1) {
                     // 如果有思考过程，在最终消息前添加思考过程
                     String finalContent = finalMessage.content;
-                    
+
                     // 如果流式内容不为空，优先使用流式内容
                     if (_streamingContent.isNotEmpty) {
                       finalContent = _streamingContent;
                     }
-                    
+
                     if (_streamingThoughts.isNotEmpty) {
                       finalContent =
                           '**思考过程:**\n```\n${_streamingThoughts.join('\n')}\n```\n\n---\n\n$finalContent';
@@ -404,9 +404,7 @@ class _ChatPageState extends State<ChatPage> {
       onSave: (schedule) async {
         try {
           // 调用 API 创建日程
-          await _scheduleService.createSchedule(
-            schedule.toJson(),
-          );
+          await _scheduleService.createSchedule(schedule.toJson());
 
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
