@@ -105,7 +105,18 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       title: 'CE Frontend',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.deepPurple,
+          // primary: Colors.black,
+          // onPrimary: Colors.white,
+          surface: Colors.grey.shade100,
+          // onSurface: Colors.black,
+          // secondary: Colors.grey.shade700,
+          // onSecondary: Colors.white,
+          // error: Colors.red,
+          // onError: Colors.white,
+        ),
+
         useMaterial3: true,
       ),
       localizationsDelegates: const [

@@ -272,6 +272,10 @@ class _ScheduleCardState extends State<ScheduleCard> {
         icon = Icons.celebration;
         color = Colors.purple;
         break;
+      case 'daily':
+        icon = Icons.calendar_today;
+        color = Colors.green;
+        break;
       default:
         icon = Icons.event_note;
         color = Colors.grey;
