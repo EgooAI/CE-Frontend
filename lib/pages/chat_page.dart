@@ -970,7 +970,7 @@ class _ChatPageState extends State<ChatPage> {
                         borderRadius: BorderRadius.all(Radius.circular(999)),
                         borderSide: BorderSide(width: 1, color: Colors.black),
                       ),
-                      contentPadding: EdgeInsets.symmetric(
+                      contentPadding: const EdgeInsets.symmetric(
                         horizontal: 20,
                         vertical: 8,
                       ),
