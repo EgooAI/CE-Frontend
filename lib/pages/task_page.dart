@@ -20,6 +20,16 @@ class _TaskPageState extends State<TaskPage>
   List<Schedule> _allTasks = [];
   final Set<String> _expandedTaskIds = {};
 
+  String _selectedScheduleType = 'all';
+
+  final Map<String, String> _scheduleTypeOptions = {
+    'all': '全部日程',
+    'daily': '日常',
+    'task': '任务',
+    'meeting': '会议',
+    'event': '事件',
+  };
+
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -83,21 +93,24 @@ class _TaskPageState extends State<TaskPage>
   }
 
   // 根据状态筛选任务
-  List<Schedule> _getTasksByStatus(String status) {
+  List<Schedule> _getTasksByStatus(
+    String status,
+    List<Schedule> tasksToFilter,
+  ) {
     if (status == 'upcoming') {
       // 即将开始：今天的待办任务
       final now = DateTime.now();
       final todayStart = DateTime(now.year, now.month, now.day);
       final tomorrowStart = DateTime(now.year, now.month, now.day + 1);
 
-      return _allTasks.where((task) {
+      return tasksToFilter.where((task) {
         return task.status == 'pending' &&
             !task.startTime.isBefore(todayStart) &&
             task.startTime.isBefore(tomorrowStart);
       }).toList();
     }
 
-    return _allTasks.where((task) => task.status == status).toList();
+    return tasksToFilter.where((task) => task.status == status).toList();
   }
 
   // 切换任务卡片展开/折叠
@@ -288,9 +301,19 @@ class _TaskPageState extends State<TaskPage>
 
   @override
   Widget build(BuildContext context) {
+    final List<Schedule> currentFilteredTasks = _allTasks.where((task) {
+      if (_selectedScheduleType == 'all') {
+        return true; // "全部日程"，不过滤
+      }
+      // 假设你的 Schedule-Model 中有一个 'type' 字段
+      // (e.g., task.type == 'daily' or 'task' or 'meeting')
+      return task.type == _selectedScheduleType;
+    }).toList();
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('任务'),
+        // title: const Text('任务'),
+        title: _buildScheduleTypeDropdown(),
         actions: [
           IconButton(
             icon: const Icon(Icons.add),
@@ -303,7 +326,11 @@ class _TaskPageState extends State<TaskPage>
           isScrollable: true,
           tabAlignment: TabAlignment.start,
           tabs: _tabs.map((tab) {
-            final tasks = _getTasksByStatus(tab.status);
+            // final tasks = _getTasksByStatus(tab.status);
+            final tasks = _getTasksByStatus(
+              tab.status,
+              currentFilteredTasks,
+            ); // 传入新列表
             return Tab(
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -342,14 +369,61 @@ class _TaskPageState extends State<TaskPage>
           ? _buildErrorView()
           : TabBarView(
               controller: _tabController,
-              children: _tabs.map((tab) => _buildTaskList(tab.status)).toList(),
+              children: _tabs
+                  .map(
+                    (tab) => _buildTaskList(tab.status, currentFilteredTasks),
+                  )
+                  .toList(),
             ),
     );
   }
 
+  Widget _buildScheduleTypeDropdown() {
+    return Container(
+      decoration: BoxDecoration(
+        color:
+            Theme.of(context).appBarTheme.backgroundColor ?? Colors.transparent,
+        borderRadius: BorderRadius.circular(12.0),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          padding: const EdgeInsets.all(8),
+          value: _selectedScheduleType,
+          isDense: true,
+          style: Theme.of(context).appBarTheme.titleTextStyle,
+          icon: Icon(
+            Icons.arrow_drop_down,
+            color: Theme.of(context).appBarTheme.iconTheme?.color,
+          ),
+          focusColor: Colors.white.withValues(alpha: 0),
+          borderRadius: BorderRadius.circular(12.0),
+          dropdownColor: Colors.white,
+
+          items: _scheduleTypeOptions.entries.map((entry) {
+            return DropdownMenuItem<String>(
+              value: entry.key,
+              child: Text(
+                entry.value,
+                style: const TextStyle(color: Colors.black, fontSize: 16),
+              ),
+            );
+          }).toList(),
+
+          onChanged: (newValue) {
+            if (newValue != null) {
+              setState(() {
+                _selectedScheduleType = newValue;
+              });
+            }
+          },
+        ),
+      ),
+    );
+  }
+
   // 构建任务列表
-  Widget _buildTaskList(String status) {
-    final tasks = _getTasksByStatus(status);
+  Widget _buildTaskList(String status, List<Schedule> tasksToFilter) {
+    final tasks = _getTasksByStatus(status, tasksToFilter);
 
     if (tasks.isEmpty) {
       return _buildEmptyState(status);
