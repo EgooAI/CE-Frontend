@@ -17,6 +17,7 @@ class Schedule {
   final String? daomengId;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final bool isDaily;
 
   Schedule({
     required this.id,
@@ -37,6 +38,7 @@ class Schedule {
     this.daomengId,
     this.createdAt,
     this.updatedAt,
+    this.isDaily = false,
   });
 
   factory Schedule.fromJson(Map<String, dynamic> json) {
@@ -68,6 +70,7 @@ class Schedule {
       updatedAt: json['updatedAt'] != null
           ? DateTime.parse(json['updatedAt']).toLocal()
           : null,
+      isDaily: json['type'] == 'daily' ? true : false,
     );
   }
 

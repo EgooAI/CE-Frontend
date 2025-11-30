@@ -123,6 +123,36 @@ class _ProfilePageState extends State<ProfilePage> {
                     : "未知",
               ),
             ),
+            ListTile(
+              leading: const Icon(Icons.calendar_today),
+              title: const Text('日常事项在日历中显示'),
+              trailing: Switch(
+                value: user.config.dailyScheduleDisplayInCalendar,
+                onChanged: (value) async {
+                  final oldConfig = user.config;
+                  setState(() {
+                    user = user.copyWith(
+                      config: user.config.copyWith(
+                        dailyScheduleDisplayInCalendar: value,
+                      ),
+                    );
+                  });
+                  try {
+                    await AuthService().updateUserConfig(user.config);
+                  } catch (e) {
+                    if (!context.mounted) return;
+
+                    setState(() {
+                      user = user.copyWith(config: oldConfig);
+                    });
+
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('更新设置失败: $e')));
+                  }
+                },
+              ),
+            ),
           ],
         ),
       ),

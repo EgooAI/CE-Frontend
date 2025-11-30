@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:ce_frontend/models/user_config.dart';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/auth_response.dart';
@@ -180,6 +181,21 @@ class AuthService {
         throw Exception('当前密码错误');
       }
       throw Exception('更新密码失败: ${e.response?.data ?? e.message}');
+    }
+  }
+
+  Future<void> updateUserConfig(UserConfig config) async {
+    try {
+      final response = await ApiClient.instance.put(
+        '/profile/config',
+        data: config.toJson(),
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('更新用户配置失败: ${response.data}');
+      }
+    } on DioException catch (e) {
+      throw Exception('更新用户配置失败: ${e.response?.data ?? e.message}');
     }
   }
 }

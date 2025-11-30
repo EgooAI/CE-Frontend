@@ -1,3 +1,5 @@
+import 'package:ce_frontend/models/user_config.dart';
+
 class User {
   final String id;
   final String email;
@@ -5,6 +7,7 @@ class User {
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final String? notificationEmail;
+  final UserConfig config;
 
   User({
     required this.id,
@@ -13,6 +16,7 @@ class User {
     this.createdAt,
     this.updatedAt,
     this.notificationEmail,
+    required this.config,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -27,6 +31,9 @@ class User {
           ? DateTime.parse(json['updatedAt'])
           : null,
       notificationEmail: json['notificationEmail'],
+      config: json['config'] != null
+          ? UserConfig.fromJson(json['config'])
+          : UserConfig(),
     );
   }
 
@@ -38,6 +45,23 @@ class User {
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
       'notificationEmail': notificationEmail,
+      'config': config.toJson(),
     };
+  }
+
+  User copyWith({
+    String? notificationEmail,
+    UserConfig? config,
+    // ... 其他字段
+  }) {
+    return User(
+      id: this.id,
+      email: this.email,
+      username: this.username,
+      createdAt: this.createdAt,
+      updatedAt: this.updatedAt,
+      notificationEmail: notificationEmail ?? this.notificationEmail,
+      config: config ?? this.config,
+    );
   }
 }
