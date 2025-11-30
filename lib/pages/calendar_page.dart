@@ -1,9 +1,13 @@
+import 'package:ce_frontend/services/auth_service.dart';
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import '../models/schedule.dart';
 import '../services/schedule_service.dart';
 import '../widgets/schedule_card.dart';
 import '../widgets/create_schedule_bottom_sheet.dart';
+import 'package:flutter/rendering.dart';
+import 'package:intl/intl.dart';
+// import 'package:flutter_animate/flutter_animate.dart';
 
 class CalendarPage extends StatefulWidget {
   const CalendarPage({super.key});
@@ -17,7 +21,6 @@ class _CalendarPageState extends State<CalendarPage> {
 
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
-  CalendarFormat _calendarFormat = CalendarFormat.month;
 
   Map<DateTime, List<Schedule>> _scheduleMap = {};
   final Set<String> _expandedScheduleIds = {};
@@ -52,7 +55,21 @@ class _CalendarPageState extends State<CalendarPage> {
     });
 
     try {
-      final schedules = await _scheduleService.getSchedules();
+      List<Schedule> schedules = [];
+      final initialSchedules = await _scheduleService.getSchedules();
+      final currentUser = await AuthService().getProfile();
+      if (currentUser != null &&
+          currentUser.config.dailyScheduleDisplayInCalendar == false) {
+        // 检查配置：如果“不显示日常”，则把 isDaily 为 true 的过滤掉
+        schedules = initialSchedules.where((s) {
+          // TODO: 这里需要你根据实际 Schedule 结构修改判断条件
+          // 例如：return s.type != 'daily';
+          // 或者：return !s.isRoutine;
+          return s.isDaily == false;
+        }).toList();
+      } else {
+        schedules = initialSchedules;
+      }
       setState(() {
         _scheduleMap = _buildScheduleMap(schedules);
         _isLoading = false;
@@ -332,166 +349,217 @@ class _CalendarPageState extends State<CalendarPage> {
       appBar: AppBar(
         title: const Text('日历'),
         actions: [
-          // 今天按钮（蓝色）
           TextButton(
             onPressed: _jumpToToday,
-            style: TextButton.styleFrom(foregroundColor: Colors.blue[300]),
             child: const Text(
               '今天',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
-          // 新建按钮
           IconButton(icon: const Icon(Icons.add), onPressed: _showCreateDialog),
         ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _errorMessage != null
-          ? _buildErrorView()
           : CustomScrollView(
               slivers: [
-                // 日历视图（可滚动）
-                SliverToBoxAdapter(
-                  child: Column(
-                    children: [_buildCalendar(), const Divider(height: 40)],
+                // 1. 核心：可跟随手指收缩的日历头部
+                SliverPersistentHeader(
+                  pinned: true, // 关键：收缩后固定在顶部
+                  delegate: _CalendarHeaderDelegate(
+                    focusedDay: _focusedDay,
+                    selectedDay: _selectedDay,
+                    onDaySelected: _onDaySelected,
+                    onPageChanged: (focusedDay) {
+                      setState(() {
+                        _focusedDay = focusedDay;
+                      });
+                    },
+                    eventLoader: _getSchedulesForDay,
                   ),
                 ),
-                // 日程列表
+
+                // 2. 日程列表
                 _buildScheduleList(),
+
+                // 底部安全距离
+                const SliverPadding(padding: EdgeInsets.only(bottom: 40)),
               ],
             ),
     );
   }
 
   // 构建日历组件
-  Widget _buildCalendar() {
-    return TableCalendar<Schedule>(
-      // 本地化设置
-      locale: 'zh_CN',
-      // 性能优化：缓存日程加载结果
-      startingDayOfWeek: StartingDayOfWeek.monday,
-      firstDay: DateTime.utc(2020, 1, 1),
-      lastDay: DateTime.utc(2030, 12, 31),
-      focusedDay: _focusedDay,
-      selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-      calendarFormat: _calendarFormat,
-      eventLoader: _getSchedulesForDay,
-      onDaySelected: _onDaySelected,
-      onFormatChanged: (format) {
-        setState(() {
-          _calendarFormat = format;
-        });
-      },
-      onPageChanged: (focusedDay) {
-        _focusedDay = focusedDay;
-      },
-      // 样式配置
-      calendarStyle: CalendarStyle(
-        // 今天的日期用淡蓝色
-        todayDecoration: BoxDecoration(
-          color: Colors.blue[100],
-          shape: BoxShape.circle,
-        ),
-        todayTextStyle: const TextStyle(
-          color: Colors.black,
-          fontWeight: FontWeight.bold,
-        ),
-        // 选中的日期用蓝色
-        selectedDecoration: const BoxDecoration(
-          color: Colors.blue,
-          shape: BoxShape.circle,
-        ),
-        selectedTextStyle: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.bold,
-        ),
-        // 其他日期无装饰
-        defaultDecoration: const BoxDecoration(),
-        defaultTextStyle: const TextStyle(color: Colors.black87),
-        weekendDecoration: const BoxDecoration(),
-        weekendTextStyle: TextStyle(color: Colors.red[300]),
-        outsideDecoration: const BoxDecoration(),
-        outsideTextStyle: const TextStyle(color: Colors.grey),
-        disabledDecoration: const BoxDecoration(),
-        disabledTextStyle: const TextStyle(color: Colors.grey),
-        holidayDecoration: const BoxDecoration(),
-        markerDecoration: const BoxDecoration(
-          color: Colors.red,
-          shape: BoxShape.circle,
-        ),
-        markersMaxCount: 1,
-        canMarkersOverflow: false,
-      ),
-      daysOfWeekStyle: const DaysOfWeekStyle(decoration: BoxDecoration()),
-      headerStyle: const HeaderStyle(
-        formatButtonVisible: false,
-        titleCentered: true,
-      ),
-      // 自定义日期单元格构建器，完全禁用点击反馈
-      calendarBuilders: CalendarBuilders(
-        // 自定义默认日期单元格
-        defaultBuilder: (context, day, focusedDay) {
-          return _buildDateCell(day, false, false);
-        },
-        // 自定义今天的单元格
-        todayBuilder: (context, day, focusedDay) {
-          return _buildDateCell(day, true, false);
-        },
-        // 自定义选中的单元格
-        selectedBuilder: (context, day, focusedDay) {
-          return _buildDateCell(day, false, true);
-        },
-        // 自定义标记（红点）
-        markerBuilder: (context, date, events) {
-          if (events.isNotEmpty) {
-            if (events.any((e) => e.shouldShowMarker())) {
-              return Positioned(
-                bottom: 1,
-                child: Container(
-                  width: 6,
-                  height: 6,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.red,
-                  ),
-                ),
-              );
-            }
-          }
-          return null;
-        },
-      ),
-    );
-  }
+  // Widget _buildCalendar() {
+  //   // 判断是否处于展开（月视图）状态
+  //   final isMonth = _calendarFormat == CalendarFormat.month;
+
+  //   return Column(
+  //     children: [
+  //       // ------------------------------------------------------
+  //       // 1. 自定义头部 + 星期栏 (使用 AnimatedSize 包裹)
+  //       // ------------------------------------------------------
+  //       AnimatedSize(
+  //         // 这里的时长要和 TableCalendar 保持一致，确保同步
+  //         duration: const Duration(milliseconds: 300),
+  //         curve: Curves.easeInOut,
+  //         alignment: Alignment.topCenter, // 收缩时向上对齐
+  //         child: isMonth
+  //             ? Column(
+  //                 children: [
+  //                   // 1.1 年月标题 (e.g. 2025年11月)
+  //                   Padding(
+  //                     padding: const EdgeInsets.symmetric(vertical: 8.0),
+  //                     child: Text(
+  //                       DateFormat.yMMM('zh_CN').format(_focusedDay),
+  //                       style: const TextStyle(
+  //                         fontSize: 18.0,
+  //                         fontWeight: FontWeight.bold,
+  //                       ),
+  //                     ),
+  //                   ),
+  //                   // 1.2 星期栏 (周一 ... 周日)
+  //                   Padding(
+  //                     padding: const EdgeInsets.only(bottom: 8.0),
+  //                     child: Row(
+  //                       mainAxisAlignment: MainAxisAlignment.spaceAround,
+  //                       children: ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+  //                           .map(
+  //                             (day) => Text(
+  //                               day,
+  //                               style: TextStyle(
+  //                                 color: Colors.grey[600],
+  //                                 fontSize: 13,
+  //                               ),
+  //                             ),
+  //                           )
+  //                           .toList(),
+  //                     ),
+  //                   ),
+  //                 ],
+  //               )
+  //             : const SizedBox(width: double.infinity), // 收起时，子组件变为空，高度自动动画缩为0
+  //       ),
+
+  //       // ------------------------------------------------------
+  //       // 2. 日历本体 (只负责显示日期网格)
+  //       // ------------------------------------------------------
+  //       TableCalendar<Schedule>(
+  //         locale: 'zh_CN',
+  //         startingDayOfWeek: StartingDayOfWeek.monday,
+  //         firstDay: DateTime.utc(2020, 1, 1),
+  //         lastDay: DateTime.utc(2030, 12, 31),
+  //         focusedDay: _focusedDay,
+  //         selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+
+  //         // 动画配置：务必和上面的 AnimatedSize 保持一致
+  //         formatAnimationDuration: const Duration(milliseconds: 300),
+  //         formatAnimationCurve: Curves.easeInOut,
+
+  //         // 核心：彻底隐藏自带的 Header 和 DaysOfWeek
+  //         headerVisible: false,
+  //         daysOfWeekVisible: false,
+
+  //         availableGestures: AvailableGestures.all,
+
+  //         eventLoader: _getSchedulesForDay,
+  //         onDaySelected: _onDaySelected,
+  //         // onFormatChanged: (format) {
+  //         //   if (_calendarFormat != format) {
+  //         //     setState(() {
+  //         //       _calendarFormat = format;
+  //         //     });
+  //         //   }
+  //         // },
+  //         onPageChanged: (focusedDay) {
+  //           setState(() {
+  //             _focusedDay = focusedDay;
+  //           });
+  //         },
+
+  //         // 样式保持原样
+  //         calendarStyle: CalendarStyle(
+  //           todayDecoration: BoxDecoration(
+  //             color: Colors.blue[100],
+  //             shape: BoxShape.circle,
+  //           ),
+  //           todayTextStyle: const TextStyle(
+  //             color: Colors.black,
+  //             fontWeight: FontWeight.bold,
+  //           ),
+  //           selectedDecoration: const BoxDecoration(
+  //             color: Colors.blue,
+  //             shape: BoxShape.circle,
+  //           ),
+  //           selectedTextStyle: const TextStyle(
+  //             color: Colors.white,
+  //             fontWeight: FontWeight.bold,
+  //           ),
+  //           markersMaxCount: 1,
+  //           markerDecoration: const BoxDecoration(
+  //             color: Colors.red,
+  //             shape: BoxShape.circle,
+  //           ),
+  //         ),
+
+  //         // Builder 保持原样
+  //         calendarBuilders: CalendarBuilders(
+  //           defaultBuilder: (context, day, focusedDay) =>
+  //               _buildDateCell(day, false, false),
+  //           todayBuilder: (context, day, focusedDay) =>
+  //               _buildDateCell(day, true, false),
+  //           selectedBuilder: (context, day, focusedDay) =>
+  //               _buildDateCell(day, false, true),
+  //           markerBuilder: (context, date, events) {
+  //             if (events.isNotEmpty &&
+  //                 events.any((e) => e.shouldShowMarker())) {
+  //               return Positioned(
+  //                 bottom: 1,
+  //                 child: Container(
+  //                   width: 6,
+  //                   height: 6,
+  //                   decoration: const BoxDecoration(
+  //                     shape: BoxShape.circle,
+  //                     color: Colors.red,
+  //                   ),
+  //                 ),
+  //               );
+  //             }
+  //             return null;
+  //           },
+  //         ),
+  //       ),
+  //     ],
+  //   );
+  // }
 
   // 构建日期单元格（带轻微点击动画）
-  Widget _buildDateCell(DateTime day, bool isToday, bool isSelected) {
-    Color? backgroundColor;
-    Color textColor = Colors.black87;
-    FontWeight fontWeight = FontWeight.normal;
+  // Widget _buildDateCell(DateTime day, bool isToday, bool isSelected) {
+  //   Color? backgroundColor;
+  //   Color textColor = Colors.black87;
+  //   FontWeight fontWeight = FontWeight.normal;
 
-    if (isSelected) {
-      backgroundColor = Colors.blue;
-      textColor = Colors.white;
-      fontWeight = FontWeight.bold;
-    } else if (isToday) {
-      backgroundColor = Colors.blue[100];
-      fontWeight = FontWeight.bold;
-    }
+  //   if (isSelected) {
+  //     backgroundColor = Colors.blue;
+  //     textColor = Colors.white;
+  //     fontWeight = FontWeight.bold;
+  //   } else if (isToday) {
+  //     backgroundColor = Colors.blue[100];
+  //     fontWeight = FontWeight.bold;
+  //   }
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      margin: const EdgeInsets.all(4),
-      decoration: BoxDecoration(color: backgroundColor, shape: BoxShape.circle),
-      child: Center(
-        child: Text(
-          '${day.day}',
-          style: TextStyle(color: textColor, fontWeight: fontWeight),
-        ),
-      ),
-    );
-  }
+  //   return AnimatedContainer(
+  //     duration: const Duration(milliseconds: 200),
+  //     margin: const EdgeInsets.all(4),
+  //     decoration: BoxDecoration(color: backgroundColor, shape: BoxShape.circle),
+  //     child: Center(
+  //       child: Text(
+  //         '${day.day}',
+  //         style: TextStyle(color: textColor, fontWeight: fontWeight),
+  //       ),
+  //     ),
+  //   );
+  // }
 
   // 构建日程列表
   Widget _buildScheduleList() {
@@ -606,5 +674,223 @@ class _CalendarPageState extends State<CalendarPage> {
         ],
       ),
     );
+  }
+}
+
+class _CalendarHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final DateTime focusedDay;
+  final DateTime? selectedDay;
+  final Function(DateTime, DateTime) onDaySelected;
+  final Function(DateTime) onPageChanged;
+  final List<Schedule> Function(DateTime) eventLoader;
+
+  _CalendarHeaderDelegate({
+    required this.focusedDay,
+    required this.selectedDay,
+    required this.onDaySelected,
+    required this.onPageChanged,
+    required this.eventLoader,
+  });
+
+  // 常量配置
+  static const double _rowHeight = 52.0;
+  static const double _titleHeight = 40.0;
+  static const double _dayOfWeekHeight = 30.0;
+
+  // !!! 修改点 1: 统一改为 6 行，以兼容所有月份 !!!
+  static const int _showRowsCount = 6;
+
+  static const double _headerTotalHeight = _titleHeight + _dayOfWeekHeight;
+
+  // 最大高度 = 头部 + 6行日期
+  static const double _maxExtent =
+      _headerTotalHeight + (_rowHeight * _showRowsCount) + 10;
+
+  // 最小高度
+  static const double _minExtent = _rowHeight;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    // 1. 计算需要上移的距离
+    final int selectedRowIndex = _calculateSelectedRowIndex();
+    final double targetSlideUpOffset =
+        _headerTotalHeight + (selectedRowIndex * _rowHeight);
+
+    // 2. 动画进度计算
+    final double shrinkProgress = shrinkOffset / (maxExtent - minExtent);
+    final double clampedProgress = shrinkProgress.clamp(0.0, 1.0);
+    final double currentTranslateY = targetSlideUpOffset * clampedProgress;
+
+    final Color backgroundColor = Theme.of(context).scaffoldBackgroundColor;
+
+    // -----------------------------------------------------------
+    // 新增：计算阴影/边框的不透明度
+    // -----------------------------------------------------------
+    // 只有当收缩进度超过 0% 时才开始显示，完全收缩时达到最大不透明度
+    // 这里的 0.1 是阴影的最大浓度，你可以根据需要调整 (0.0 ~ 1.0)
+    final double shadowOpacity = (clampedProgress * 0.1).clamp(0.0, 1.0);
+
+    // 如果想要边框而不是阴影，用这个透明度
+    // final double borderOpacity = (clampedProgress * 0.15).clamp(0.0, 1.0);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: backgroundColor,
+
+        // 方案 A: 底部阴影 (更有立体感)
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(
+              (shadowOpacity * 255).toInt(),
+            ), // 动态透明度
+            offset: const Offset(0, 2), // 向下偏移 2px
+            blurRadius: 4, // 模糊半径
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: ClipRect(
+        child: OverflowBox(
+          minHeight: maxExtent,
+          maxHeight: maxExtent,
+          alignment: Alignment.topCenter,
+          child: Transform.translate(
+            offset: Offset(0, -currentTranslateY),
+            child: Column(
+              children: [
+                // 1. 标题
+                SizedBox(
+                  height: _titleHeight,
+                  child: Center(
+                    child: Text(
+                      DateFormat.yMMM('zh_CN').format(focusedDay),
+                      style: const TextStyle(
+                        fontSize: 17.0,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+
+                // 2. 星期
+                SizedBox(
+                  height: _dayOfWeekHeight,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+                        .map(
+                          (day) => Text(
+                            day,
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 13,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+
+                // 3. 日历主体
+                SizedBox(
+                  height: _rowHeight * _showRowsCount, // 6行高度
+                  child: TableCalendar<Schedule>(
+                    locale: 'zh_CN',
+                    firstDay: DateTime.utc(2020, 1, 1),
+                    lastDay: DateTime.utc(2030, 12, 31),
+                    focusedDay: focusedDay,
+                    selectedDayPredicate: (day) => isSameDay(selectedDay, day),
+
+                    calendarFormat: CalendarFormat.month,
+                    shouldFillViewport: true,
+
+                    // !!! 修改点 2: 强制所有月份都渲染成 6 行 !!!
+                    // 这样5行月份的下面会补一行灰色的下月日期，保证高度不跳变
+                    sixWeekMonthsEnforced: true,
+
+                    headerVisible: false,
+                    daysOfWeekVisible: false,
+                    rowHeight: _rowHeight,
+
+                    eventLoader: eventLoader,
+                    onDaySelected: onDaySelected,
+                    onPageChanged: onPageChanged,
+
+                    calendarStyle: const CalendarStyle(
+                      todayDecoration: BoxDecoration(
+                        color: Colors.blueAccent,
+                        shape: BoxShape.circle,
+                      ),
+                      selectedDecoration: BoxDecoration(
+                        color: Colors.blue,
+                        shape: BoxShape.circle,
+                      ),
+                      markersMaxCount: 1,
+                      markerDecoration: BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    calendarBuilders: CalendarBuilders(
+                      markerBuilder: (context, date, events) {
+                        if (events.isNotEmpty) {
+                          return Positioned(
+                            bottom: 1,
+                            child: Container(
+                              width: 6,
+                              height: 6,
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.red,
+                              ),
+                            ),
+                          );
+                        }
+                        return null;
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 计算选中日期在当前月份是第几行 (0-5)
+  int _calculateSelectedRowIndex() {
+    if (selectedDay == null) return 0;
+
+    // 这里的逻辑适用于 Monday Start
+    DateTime firstDayOfMonth = DateTime(focusedDay.year, focusedDay.month, 1);
+    int daysDifference = firstDayOfMonth.weekday - 1;
+    DateTime firstVisibleDay = firstDayOfMonth.subtract(
+      Duration(days: daysDifference),
+    );
+
+    int index = selectedDay!.difference(firstVisibleDay).inDays;
+    if (index < 0) return 0;
+
+    int rowIndex = index ~/ 7;
+    // 修改点 3: 允许最大索引为 5 (即第6行)
+    return rowIndex.clamp(0, _showRowsCount - 1);
+  }
+
+  @override
+  double get maxExtent => _maxExtent;
+
+  @override
+  double get minExtent => _minExtent;
+
+  @override
+  bool shouldRebuild(covariant _CalendarHeaderDelegate oldDelegate) {
+    return oldDelegate.focusedDay != focusedDay ||
+        oldDelegate.selectedDay != selectedDay;
   }
 }
