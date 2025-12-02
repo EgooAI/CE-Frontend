@@ -3,8 +3,8 @@ name: Flutter Multi-Platform Build
 on:
   push:
     branches: ["master"]
-  # pull_request:
-  #   branches: [ "master" ]
+  pull_request:
+    branches: ["master"]
   workflow_dispatch: # 允许手动触发
 
 jobs:
@@ -42,7 +42,7 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
 
   # -------------------------
-  # Job 2: iOS Build (No Signing)
+  # Job 2: iOS Build (Unsigned)
   # -------------------------
   ios-build:
     name: iOS Build (Unsigned)
@@ -64,10 +64,25 @@ jobs:
           cd ios
           pod install
 
+      # 1. 构建 .app (文件夹)
       - name: Build iOS (No Code Sign)
         run: flutter build ios --release --no-codesign --dart-define=API_URL="${{ secrets.API_URL }}"
-        # 注意：要在 CI 中生成可安装的 .ipa 文件，必须配置证书和 Provisioning Profile (通常结合 Fastlane)。
-        # 这里仅演示构建过程是否通过。
+
+      # 2. 手动打包成 IPA (关键步骤)
+      - name: Package into IPA
+        run: |
+          mkdir Payload
+          # 将构建生成的 Runner.app 移动到 Payload 文件夹中
+          mv build/ios/iphoneos/Runner.app Payload
+          # 压缩 Payload 文件夹为 .ipa 文件
+          zip -r ios_app_unsigned.ipa Payload
+
+      # 3. 上传 IPA
+      - name: Upload iOS Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-unsigned-ipa
+          path: ios_app_unsigned.ipa
 
   # -------------------------
   # Job 3: macOS Build
