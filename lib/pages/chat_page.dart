@@ -761,7 +761,7 @@ class _ChatPageState extends State<ChatPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_currentConversation?.title ?? 'AI 助手'),
-        titleTextStyle: TextStyle(fontSize: 20),
+        titleTextStyle: const TextStyle(fontSize: 20),
         leading: Builder(
           builder: (context) {
             return IconButton(
@@ -776,7 +776,7 @@ class _ChatPageState extends State<ChatPage> {
       drawer: Drawer(
         width: 340,
         backgroundColor: Colors.grey[100],
-        shape: RoundedRectangleBorder(
+        shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.horizontal(right: Radius.circular(0)),
         ),
         child: Column(
@@ -962,15 +962,15 @@ class _ChatPageState extends State<ChatPage> {
                     decoration: const InputDecoration(
                       hintText: '输入消息...',
                       hintStyle: TextStyle(fontSize: 16, color: Colors.black38),
-                      enabledBorder: OutlineInputBorder(
+                      enabledBorder: const OutlineInputBorder(
                         borderRadius: BorderRadius.all(Radius.circular(999)),
                         borderSide: BorderSide(width: 1, color: Colors.black26),
                       ),
-                      focusedBorder: OutlineInputBorder(
+                      focusedBorder: const OutlineInputBorder(
                         borderRadius: BorderRadius.all(Radius.circular(999)),
                         borderSide: BorderSide(width: 1, color: Colors.black),
                       ),
-                      contentPadding: EdgeInsets.symmetric(
+                      contentPadding: const EdgeInsets.symmetric(
                         horizontal: 20,
                         vertical: 8,
                       ),
