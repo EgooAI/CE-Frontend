@@ -3,8 +3,8 @@ name: Flutter Multi-Platform Build
 on:
   push:
     branches: ["master"]
-  # pull_request:
-  #   branches: [ "master" ]
+  pull_request:
+    branches: ["master"]
   workflow_dispatch: # 允许手动触发
 
 jobs:

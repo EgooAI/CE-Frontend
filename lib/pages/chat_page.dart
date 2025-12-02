@@ -831,8 +831,8 @@ class _ChatPageState extends State<ChatPage> {
                         ),
                         selected: _currentConversation?.id == conversation.id,
                         selectedTileColor: Colors.black12,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(8)),
                         ),
                         onTap: () => _selectConversation(
                           conversation,
