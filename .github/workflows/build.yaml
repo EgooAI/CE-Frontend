@@ -1,0 +1,139 @@
+name: Flutter Multi-Platform Build
+
+on:
+  push:
+    branches: ["main"]
+  # pull_request:
+  #   branches: [ "main" ]
+  workflow_dispatch: # 允许手动触发
+
+jobs:
+  # -------------------------
+  # Job 1: Android Build
+  # -------------------------
+  android-build:
+    name: Android APK Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "zulu"
+          java-version: "17"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          cache: true
+
+      - name: Get Dependencies
+        run: flutter pub get
+
+      - name: Build APK
+        run: flutter build apk --release --dart-define=API_URL="${{ secrets.API_URL }}"
+
+      - name: Upload Android Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+  # -------------------------
+  # Job 2: iOS Build (No Signing)
+  # -------------------------
+  ios-build:
+    name: iOS Build (Unsigned)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          cache: true
+
+      - name: Get Dependencies
+        run: flutter pub get
+
+      - name: Install CocoaPods
+        run: |
+          cd ios
+          pod install
+
+      - name: Build iOS (No Code Sign)
+        run: flutter build ios --release --no-codesign --dart-define=API_URL="${{ secrets.API_URL }}"
+        # 注意：要在 CI 中生成可安装的 .ipa 文件，必须配置证书和 Provisioning Profile (通常结合 Fastlane)。
+        # 这里仅演示构建过程是否通过。
+
+  # -------------------------
+  # Job 3: macOS Build
+  # -------------------------
+  macos-build:
+    name: macOS Desktop Build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          cache: true
+
+      - name: Enable macOS Desktop
+        run: flutter config --enable-macos-desktop
+
+      - name: Get Dependencies
+        run: flutter pub get
+
+      - name: Build macOS App
+        run: flutter build macos --release --dart-define=API_URL="${{ secrets.API_URL }}"
+
+      - name: Compress macOS App
+        run: |
+          cd build/macos/Build/Products/Release
+          tar -czf macos_app.tar.gz *.app
+
+      - name: Upload macOS Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-release-app
+          path: build/macos/Build/Products/Release/macos_app.tar.gz
+
+  # -------------------------
+  # Job 4: Windows Build
+  # -------------------------
+  windows-build:
+    name: Windows Desktop Build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          cache: true
+
+      - name: Enable Windows Desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Get Dependencies
+        run: flutter pub get
+
+      - name: Build Windows Exe
+        run: flutter build windows --release --dart-define=API_URL="${{ secrets.API_URL }}"
+
+      - name: Compress Windows Build
+        # PowerShell 压缩命令
+        run: Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath windows_app.zip
+
+      - name: Upload Windows Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release-app
+          path: windows_app.zip
