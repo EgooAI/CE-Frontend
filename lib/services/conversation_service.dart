@@ -128,8 +128,13 @@ class ConversationService {
       return;
     }
 
-    final url =
-        'http://localhost:8080/api/conversations/$conversationId/messages/stream';
+    const baseurl = String.fromEnvironment(
+      'API_URL',
+      defaultValue: 'http://localhost:8080/api',
+    );
+
+    final url = '$baseurl/conversations/$conversationId/messages/stream';
+
     final headers = {
       'Authorization': 'Bearer $token',
       'Content-Type': 'application/json',

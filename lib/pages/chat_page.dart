@@ -434,8 +434,23 @@ class _ChatPageState extends State<ChatPage> {
             );
 
             if (shouldNavigate == true && mounted) {
-              // 跳转到日历页面（假设在 MainPage 的索引 0）
+              // 通过遍历 Widget 树查找 MainPage 的 State 并切换到日历页面
               Navigator.of(context).popUntil((route) => route.isFirst);
+
+              // 查找祖先 context 中的 MainPage state 并调用公共方法
+              context.visitAncestorElements((element) {
+                if (element.widget.runtimeType.toString() == 'MainPage') {
+                  final state = (element as StatefulElement).state;
+                  // 调用公共方法切换到日历页面（索引 1）
+                  try {
+                    (state as dynamic).switchToPage(1);
+                  } catch (e) {
+                    debugPrint('切换到日历页面失败: $e');
+                  }
+                  return false; // 停止遍历
+                }
+                return true; // 继续遍历
+              });
             }
           }
         } catch (e) {
@@ -761,7 +776,7 @@ class _ChatPageState extends State<ChatPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_currentConversation?.title ?? 'AI 助手'),
-        titleTextStyle: const TextStyle(fontSize: 20),
+        titleTextStyle: const TextStyle(fontSize: 20, color: Colors.black),
         leading: Builder(
           builder: (context) {
             return IconButton(
@@ -788,6 +803,7 @@ class _ChatPageState extends State<ChatPage> {
             //     child: Icon(Icons.chat),
             //   ),
             // ),
+            const SizedBox(height: 32.0),
             Padding(
               padding: const EdgeInsets.all(16.0),
               child: Container(

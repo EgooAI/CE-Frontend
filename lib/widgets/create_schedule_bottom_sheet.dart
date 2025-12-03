@@ -47,6 +47,7 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
   String _status = 'pending';
   String? _priority = 'medium';
   String? _type = 'task';
+  int? _remindBefore; // 提前提醒分钟数
 
   bool _isLoading = false;
   String? _validationError; // 验证错误提示
@@ -72,6 +73,7 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
       _status = schedule.status;
       _priority = schedule.priority ?? 'medium';
       _type = schedule.type ?? 'task';
+      _remindBefore = schedule.remindBefore;
     } else if (widget.initialData != null) {
       // AI 预填充模式
       final data = widget.initialData!;
@@ -92,6 +94,7 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
       _status = data['status'] ?? 'pending';
       _priority = data['priority'] ?? 'medium';
       _type = data['type'] ?? 'task';
+      _remindBefore = data['remindBefore'];
     } else {
       // 创建模式：使用默认值
       final initialDate = widget.initialDate ?? DateTime.now();
@@ -267,6 +270,7 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
         participants: _participantsController.text.trim().isEmpty
             ? null
             : _participantsController.text.trim(),
+        remindBefore: _remindBefore,
       );
 
       widget.onSave(schedule);
@@ -348,9 +352,11 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
                       const SizedBox(height: 16),
                       _buildDateTimeSection(),
                       const SizedBox(height: 16),
-                      _buildAllDaySwitch(),
-                      const SizedBox(height: 16),
                       _buildLocationField(),
+                      const SizedBox(height: 16),
+                      _buildRemindBeforeField(),
+                      const SizedBox(height: 16),
+                      _buildAllDaySwitch(),
                       const SizedBox(height: 16),
                       _buildStatusSection(),
                       const SizedBox(height: 16),
@@ -653,6 +659,146 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
         prefixIcon: Icon(Icons.note),
       ),
       maxLines: 2,
+    );
+  }
+
+  Widget _buildRemindBeforeField() {
+    // 预设值列表
+    const presetValues = [5, 15, 30, 60, 120, 1440];
+
+    // 判断当前值是否为自定义值
+    final isCustomValue =
+        _remindBefore != null &&
+        _remindBefore! > 0 &&
+        !presetValues.contains(_remindBefore);
+
+    // 如果是自定义值，下拉菜单显示为 -1（自定义...）
+    final dropdownValue = isCustomValue ? -1 : _remindBefore;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('提前提醒', style: TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<int?>(
+          key: ValueKey('remind_$dropdownValue'), // 使用 dropdownValue 作为 key
+          value: dropdownValue,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.notifications),
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          ),
+          items: [
+            const DropdownMenuItem(value: null, child: Text('默认提醒 (15分钟)')),
+            const DropdownMenuItem(value: 0, child: Text('不提醒')),
+            const DropdownMenuItem(value: 5, child: Text('提前 5 分钟')),
+            const DropdownMenuItem(value: 15, child: Text('提前 15 分钟')),
+            const DropdownMenuItem(value: 30, child: Text('提前 30 分钟')),
+            const DropdownMenuItem(value: 60, child: Text('提前 1 小时')),
+            const DropdownMenuItem(value: 120, child: Text('提前 2 小时')),
+            const DropdownMenuItem(value: 1440, child: Text('提前 1 天')),
+            const DropdownMenuItem(value: -1, child: Text('自定义...')),
+          ],
+          onChanged: (value) async {
+            if (value == -1) {
+              // 自定义输入
+              final customMinutes = await _showCustomRemindDialog();
+              if (customMinutes != null) {
+                setState(() {
+                  _remindBefore = customMinutes;
+                });
+              } else {
+                // 用户取消了输入，不改变当前值
+                setState(() {}); // 强制刷新以重置下拉菜单显示
+              }
+            } else {
+              setState(() {
+                _remindBefore = value;
+              });
+            }
+          },
+          hint: const Text('选择提醒时间'),
+        ),
+        if (isCustomValue)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(
+              children: [
+                Icon(Icons.schedule, size: 16, color: Colors.orange[700]),
+                const SizedBox(width: 6),
+                Text(
+                  '自定义: 提前 $_remindBefore 分钟',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.orange[700],
+                  ),
+                ),
+                const Spacer(),
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _remindBefore = null; // 清除自定义值
+                    });
+                  },
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(0, 0),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text('清除', style: TextStyle(fontSize: 12)),
+                ),
+              ],
+            ),
+          ),
+        if (_remindBefore == null && !isCustomValue)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              '💡 将在日程开始前 15 分钟提醒',
+              style: TextStyle(fontSize: 12, color: Colors.blue[700]),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<int?> _showCustomRemindDialog() async {
+    final TextEditingController controller = TextEditingController();
+    return showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('自定义提醒时间'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: '分钟数',
+            hintText: '输入提前提醒的分钟数',
+            suffixText: '分钟',
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              final minutes = int.tryParse(controller.text);
+              if (minutes != null && minutes > 0) {
+                Navigator.pop(context, minutes);
+              } else {
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(const SnackBar(content: Text('请输入有效的正整数')));
+              }
+            },
+            child: const Text('确定'),
+          ),
+        ],
+      ),
     );
   }
 

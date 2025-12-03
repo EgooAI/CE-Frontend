@@ -124,6 +124,15 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ),
             ListTile(
+              leading: const Icon(Icons.notifications_active),
+              title: const Text('我的提醒'),
+              subtitle: const Text('查看所有日程提醒'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.pushNamed(context, '/reminders');
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.calendar_today),
               title: const Text('日常事项在日历中显示'),
               trailing: Switch(

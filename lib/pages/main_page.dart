@@ -23,6 +23,23 @@ class _MainPageState extends State<MainPage> {
     GlobalKey<State>(), // ProfilePage
   ];
 
+  // 公共方法：切换到指定页面
+  void switchToPage(int index) {
+    if (index >= 0 && index < 4) {
+      setState(() {
+        _currentIndex = index;
+      });
+
+      // 触发对应页面的数据刷新
+      if (index == 1 || index == 2) {
+        final pageState = _pageKeys[index].currentState;
+        if (pageState != null && pageState.mounted) {
+          (pageState as dynamic).refreshData?.call();
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(

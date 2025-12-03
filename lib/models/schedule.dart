@@ -15,6 +15,7 @@ class Schedule {
   final String? notes;
   final String? attachments; // JSON string
   final String? daomengId;
+  final int? remindBefore; // 提前提醒分钟数
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final bool isDaily;
@@ -36,6 +37,7 @@ class Schedule {
     this.notes,
     this.attachments,
     this.daomengId,
+    this.remindBefore,
     this.createdAt,
     this.updatedAt,
     this.isDaily = false,
@@ -64,6 +66,7 @@ class Schedule {
       notes: json['notes'],
       attachments: json['attachments'],
       daomengId: json['daomengId'],
+      remindBefore: json['remindBefore'],
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt']).toLocal()
           : null,
@@ -113,6 +116,7 @@ class Schedule {
       'notes': notes,
       'attachments': attachments,
       'daomengId': daomengId,
+      if (remindBefore != null) 'remindBefore': remindBefore,
       'createdAt': createdAt != null ? formatDateTime(createdAt!) : null,
       'updatedAt': updatedAt != null ? formatDateTime(updatedAt!) : null,
     };
@@ -200,6 +204,7 @@ class Schedule {
     String? notes,
     String? attachments,
     String? daomengId,
+    int? remindBefore,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -220,6 +225,7 @@ class Schedule {
       notes: notes ?? this.notes,
       attachments: attachments ?? this.attachments,
       daomengId: daomengId ?? this.daomengId,
+      remindBefore: remindBefore ?? this.remindBefore,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

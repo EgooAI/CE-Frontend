@@ -82,3 +82,5 @@ app.*.map.json
 **/macos/Flutter/ephemeral/
 
 .env
+
+.vscode/**
