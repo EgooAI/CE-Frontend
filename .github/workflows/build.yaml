@@ -127,13 +127,14 @@ jobs:
       - name: Compress macOS App
         run: |
           cd build/macos/Build/Products/Release
-          tar -czf ../../../chrono-macos-${{ steps.commit.outputs.short_sha }}.app.tar.gz *.app
+          tar -czf chrono-macos-${{ steps.commit.outputs.short_sha }}.app.tar.gz *.app
+          mv chrono-macos-${{ steps.commit.outputs.short_sha }}.app.tar.gz ../../../../../
 
       - name: Upload macOS Artifact
         uses: actions/upload-artifact@v4
         with:
           name: chrono-macos-${{ steps.commit.outputs.short_sha }}
-          path: build/macos/Build/Products/chrono-macos-${{ steps.commit.outputs.short_sha }}.app.tar.gz
+          path: chrono-macos-${{ steps.commit.outputs.short_sha }}.app.tar.gz
           if-no-files-found: error
 
   # -------------------------

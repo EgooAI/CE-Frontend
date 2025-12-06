@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 class Schedule {
   final String id;
   final String userId;
@@ -109,6 +111,17 @@ class Schedule {
       return '$year-$month-${day}T$hour:$minute:$second$sign$offsetHours:$offsetMinutes';
     }
 
+    // 处理 recurrence：如果是 JSON 字符串，解析成对象
+    dynamic recurrenceValue;
+    if (recurrence != null && recurrence!.isNotEmpty) {
+      try {
+        recurrenceValue = jsonDecode(recurrence!);
+      } catch (_) {
+        // 解析失败，可能本身就是对象或其他格式，保持原样
+        recurrenceValue = recurrence;
+      }
+    }
+
     return {
       'id': id,
       'userId': userId,
@@ -121,7 +134,7 @@ class Schedule {
       'status': status,
       'type': type,
       'priority': priority,
-      'recurrence': recurrence,
+      if (recurrenceValue != null) 'recurrence': recurrenceValue,
       'participants': participants,
       'notes': notes,
       'attachments': attachments,
