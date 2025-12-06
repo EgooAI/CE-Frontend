@@ -12,17 +12,10 @@ class ConversationService {
   Future<List<Conversation>> getConversations() async {
     try {
       final response = await ApiClient.instance.get('/conversations');
-
-      if (response.statusCode == 200) {
-        final List<dynamic> body = response.data;
-        return body.map((e) => Conversation.fromJson(e)).toList();
-      } else {
-        throw Exception('Failed to load conversations: ${response.data}');
-      }
+      final List<dynamic> body = response.data;
+      return body.map((e) => Conversation.fromJson(e)).toList();
     } on DioException catch (e) {
-      throw Exception(
-        'Failed to load conversations: ${e.response?.data ?? e.message}',
-      );
+      throw Exception(e.message ?? 'Failed to load conversations');
     }
   }
 
@@ -32,32 +25,18 @@ class ConversationService {
         '/conversations',
         data: {'title': title},
       );
-
-      if (response.statusCode == 201) {
-        return Conversation.fromJson(response.data);
-      } else {
-        throw Exception('Failed to create conversation: ${response.data}');
-      }
+      return Conversation.fromJson(response.data);
     } on DioException catch (e) {
-      throw Exception(
-        'Failed to create conversation: ${e.response?.data ?? e.message}',
-      );
+      throw Exception(e.message ?? 'Failed to create conversation');
     }
   }
 
   Future<Conversation> getConversation(String id) async {
     try {
       final response = await ApiClient.instance.get('/conversations/$id');
-
-      if (response.statusCode == 200) {
-        return Conversation.fromJson(response.data);
-      } else {
-        throw Exception('Failed to load conversation: ${response.data}');
-      }
+      return Conversation.fromJson(response.data);
     } on DioException catch (e) {
-      throw Exception(
-        'Failed to load conversation: ${e.response?.data ?? e.message}',
-      );
+      throw Exception(e.message ?? 'Failed to load conversation');
     }
   }
 
@@ -67,30 +46,17 @@ class ConversationService {
         '/conversations/$conversationId/messages',
         data: {'role': 'user', 'content': content},
       );
-
-      if (response.statusCode == 201) {
-        return Message.fromJson(response.data);
-      } else {
-        throw Exception('Failed to send message: ${response.data}');
-      }
+      return Message.fromJson(response.data);
     } on DioException catch (e) {
-      throw Exception(
-        'Failed to send message: ${e.response?.data ?? e.message}',
-      );
+      throw Exception(e.message ?? 'Failed to send message');
     }
   }
 
   Future<void> deleteConversation(String id) async {
     try {
-      final response = await ApiClient.instance.delete('/conversations/$id');
-
-      if (response.statusCode != 200) {
-        throw Exception('Failed to delete conversation: ${response.data}');
-      }
+      await ApiClient.instance.delete('/conversations/$id');
     } on DioException catch (e) {
-      throw Exception(
-        'Failed to delete conversation: ${e.response?.data ?? e.message}',
-      );
+      throw Exception(e.message ?? 'Failed to delete conversation');
     }
   }
 
@@ -100,18 +66,9 @@ class ConversationService {
         '/conversations/$id/title',
         data: {'title': title},
       );
-
-      if (response.statusCode == 200) {
-        return Conversation.fromJson(response.data);
-      } else {
-        throw Exception(
-          'Failed to update conversation title: ${response.data}',
-        );
-      }
+      return Conversation.fromJson(response.data);
     } on DioException catch (e) {
-      throw Exception(
-        'Failed to update conversation title: ${e.response?.data ?? e.message}',
-      );
+      throw Exception(e.message ?? 'Failed to update conversation title');
     }
   }
 
@@ -165,9 +122,6 @@ class ConversationService {
         } else if (eventName == 'schedule_parsed') {
           // AI 解析出的日程数据
           yield StreamEvent(type: 'schedule_parsed', data: data);
-        } else if (eventName == 'done') {
-          // Streaming content character by character
-          yield StreamEvent(type: 'content', data: data);
         } else if (eventName == 'done') {
           // data is the final Message object
           if (data is Map) {

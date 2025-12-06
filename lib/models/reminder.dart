@@ -1,3 +1,5 @@
+import 'schedule.dart';
+
 /// 提醒数据模型
 class Reminder {
   final String id;
@@ -5,6 +7,7 @@ class Reminder {
   final DateTime remindAt; // 提醒时间
   final bool reminded; // 是否已提醒
   final DateTime createdAt;
+  final Schedule? schedule; // 关联的日程对象
 
   Reminder({
     required this.id,
@@ -12,6 +15,7 @@ class Reminder {
     required this.remindAt,
     required this.reminded,
     required this.createdAt,
+    this.schedule,
   });
 
   factory Reminder.fromJson(Map<String, dynamic> json) {
@@ -21,6 +25,9 @@ class Reminder {
       remindAt: DateTime.parse(json['remindAt']).toLocal(),
       reminded: json['reminded'] ?? false,
       createdAt: DateTime.parse(json['createdAt']).toLocal(),
+      schedule: json['schedule'] != null
+          ? Schedule.fromJson(json['schedule'])
+          : null,
     );
   }
 
@@ -31,6 +38,7 @@ class Reminder {
       'remindAt': remindAt.toIso8601String(),
       'reminded': reminded,
       'createdAt': createdAt.toIso8601String(),
+      if (schedule != null) 'schedule': schedule!.toJson(),
     };
   }
 }

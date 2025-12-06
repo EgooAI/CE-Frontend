@@ -7,15 +7,10 @@ class ScheduleService {
   Future<List<Schedule>> getSchedules() async {
     try {
       final response = await ApiClient.instance.get('/schedules');
-
-      if (response.statusCode == 200) {
-        final List<dynamic> data = response.data as List;
-        return data.map((json) => Schedule.fromJson(json)).toList();
-      } else {
-        throw Exception('获取日程失败: ${response.data}');
-      }
+      final List<dynamic> data = response.data as List;
+      return data.map((json) => Schedule.fromJson(json)).toList();
     } on DioException catch (e) {
-      throw Exception('获取日程失败: ${e.response?.data ?? e.message}');
+      throw Exception(e.message ?? '获取日程失败');
     }
   }
 
@@ -23,66 +18,68 @@ class ScheduleService {
   Future<Schedule> getSchedule(String id) async {
     try {
       final response = await ApiClient.instance.get('/schedules/$id');
-
-      if (response.statusCode == 200) {
-        return Schedule.fromJson(response.data);
-      } else {
-        throw Exception('获取日程详情失败: ${response.data}');
-      }
+      return Schedule.fromJson(response.data);
     } on DioException catch (e) {
-      throw Exception('获取日程详情失败: ${e.response?.data ?? e.message}');
+      throw Exception(e.message ?? '获取日程详情失败');
     }
   }
 
   // 创建日程
-  Future<Schedule> createSchedule(Map<String, dynamic> scheduleData) async {
+  Future<void> createSchedule(Map<String, dynamic> scheduleData) async {
     try {
-      final response = await ApiClient.instance.post(
-        '/schedules',
-        data: scheduleData,
-      );
-
-      if (response.statusCode == 201) {
-        return Schedule.fromJson(response.data);
-      } else {
-        throw Exception('创建日程失败: ${response.data}');
-      }
+      await ApiClient.instance.post('/schedules', data: scheduleData);
+      // 成功时拦截器会自动处理，失败时会抛出异常
     } on DioException catch (e) {
-      throw Exception('创建日程失败: ${e.response?.data ?? e.message}');
+      throw Exception(e.message ?? '创建日程失败');
     }
   }
 
   // 更新日程
-  Future<Schedule> updateSchedule(
+  Future<void> updateSchedule(
     String id,
     Map<String, dynamic> scheduleData,
   ) async {
     try {
-      final response = await ApiClient.instance.put(
-        '/schedules/$id',
-        data: scheduleData,
-      );
-
-      if (response.statusCode == 200) {
-        return Schedule.fromJson(response.data);
-      } else {
-        throw Exception('更新日程失败: ${response.data}');
-      }
+      await ApiClient.instance.put('/schedules/$id', data: scheduleData);
+      // 成功时拦截器会自动处理，失败时会抛出异常
     } on DioException catch (e) {
-      throw Exception('更新日程失败: ${e.response?.data ?? e.message}');
+      throw Exception(e.message ?? '更新日程失败');
     }
   }
 
   // 删除日程
   Future<void> deleteSchedule(String id) async {
     try {
-      final response = await ApiClient.instance.delete('/schedules/$id');
-
-      if (response.statusCode != 200 && response.statusCode != 204) {
-        throw Exception('删除日程失败: ${response.data}');
-      }
+      await ApiClient.instance.delete('/schedules/$id');
     } on DioException catch (e) {
-      throw Exception('删除日程失败: ${e.response?.data ?? e.message}');
+      throw Exception(e.message ?? '删除日程失败');
+    }
+  }
+
+  // 删除重复日程模板
+  // strategy: none(默认) | future | all
+  Future<void> deleteRecurrenceTemplate(
+    String templateId, {
+    String strategy = 'none',
+  }) async {
+    try {
+      await ApiClient.instance.delete(
+        '/schedules/templates/$templateId',
+        queryParameters: {'strategy': strategy},
+      );
+    } on DioException catch (e) {
+      throw Exception(e.message ?? '删除重复日程失败');
+    }
+  }
+
+  // 获取所有重复日程模板
+  Future<List<Schedule>> getTemplates() async {
+    try {
+      final response = await ApiClient.instance.get('/schedules/templates');
+      final List<dynamic> data = response.data as List;
+      return data.map((json) => Schedule.fromJson(json)).toList();
+    } on DioException catch (e) {
+      throw Exception(e.message ?? '获取重复日程模板失败');
     }
   }
 }

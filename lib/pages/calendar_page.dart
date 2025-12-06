@@ -147,27 +147,109 @@ class _CalendarPageState extends State<CalendarPage> {
 
   // 显示删除确认对话框
   Future<void> _showDeleteConfirmDialog(Schedule schedule) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('确认删除'),
-        content: Text('确定要删除「${schedule.title}」吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
-    );
+    final isRecurringInstance = schedule.parentId != null;
 
-    if (confirmed == true) {
-      _handleDelete(schedule.id);
+    if (isRecurringInstance) {
+      String selectedOption = 'single';
+
+      final result = await showDialog<Map<String, String>?>(
+        context: context,
+        builder: (context) {
+          return StatefulBuilder(
+            builder: (context, setState) {
+              return AlertDialog(
+                title: const Text('删除重复日程'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('「${schedule.title}」是重复系列中的一条。请选择删除方式：'),
+                    const SizedBox(height: 16),
+                    RadioListTile<String>(
+                      title: const Text('仅删除该事件'),
+                      value: 'single',
+                      groupValue: selectedOption,
+                      onChanged: (v) =>
+                          setState(() => selectedOption = v ?? 'single'),
+                    ),
+                    RadioListTile<String>(
+                      title: const Text('仅删除模板'),
+                      subtitle: const Text('保留所有已生成的实例'),
+                      value: 'none',
+                      groupValue: selectedOption,
+                      onChanged: (v) =>
+                          setState(() => selectedOption = v ?? 'single'),
+                    ),
+                    RadioListTile<String>(
+                      title: const Text('删除模板 + 所有待办'),
+                      subtitle: const Text('删除未开始的实例'),
+                      value: 'future',
+                      groupValue: selectedOption,
+                      onChanged: (v) =>
+                          setState(() => selectedOption = v ?? 'single'),
+                    ),
+                    RadioListTile<String>(
+                      title: const Text('删除模板 + 所有事件（含历史）'),
+                      value: 'all',
+                      groupValue: selectedOption,
+                      onChanged: (v) =>
+                          setState(() => selectedOption = v ?? 'single'),
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(null),
+                    child: const Text('取消'),
+                  ),
+                  TextButton(
+                    onPressed: () =>
+                        Navigator.of(context).pop({'action': selectedOption}),
+                    style: TextButton.styleFrom(
+                      foregroundColor: selectedOption == 'single'
+                          ? Colors.grey
+                          : Colors.red,
+                    ),
+                    child: const Text('确认删除'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+
+      if (result == null) return;
+
+      final action = result['action'] ?? 'single';
+      if (action == 'single') {
+        _handleDelete(schedule.id);
+      } else {
+        await _handleDeleteSeries(schedule.parentId!, action);
+      }
+    } else {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('确认删除'),
+          content: Text('确定要删除「${schedule.title}」吗？'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('删除'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed == true) {
+        _handleDelete(schedule.id);
+      }
     }
   }
 
@@ -276,6 +358,48 @@ class _CalendarPageState extends State<CalendarPage> {
                 const SnackBar(
                   content: Text('日程已删除'),
                   duration: Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('删除失败: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  // 删除重复日程模板
+  Future<void> _handleDeleteSeries(String templateId, String strategy) async {
+    try {
+      await _scheduleService.deleteRecurrenceTemplate(
+        templateId,
+        strategy: strategy,
+      );
+
+      // 刷新列表
+      await _loadSchedules();
+
+      if (mounted) {
+        final strategyText =
+            {'future': '模板+待办实例', 'all': '模板+全部实例'}[strategy] ?? '仅模板';
+
+        Future.microtask(() {
+          if (mounted) {
+            ScaffoldMessenger.of(context)
+              ..hideCurrentSnackBar()
+              ..showSnackBar(
+                SnackBar(
+                  content: Text('已删除：$strategyText'),
+                  duration: const Duration(seconds: 2),
                   behavior: SnackBarBehavior.floating,
                 ),
               );

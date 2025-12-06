@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import '../models/schedule.dart';
+import '../models/recurrence_rule.dart';
 
 class ScheduleCard extends StatefulWidget {
   final Schedule schedule;
@@ -224,21 +227,43 @@ class _ScheduleCardState extends State<ScheduleCard> {
                 style: TextStyle(fontSize: 14, color: Colors.grey[700]),
               ),
 
-              // 地点和状态
+              // 提醒信息
+              if (_hasReminders())
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: _buildReminderInfo(),
+                ),
+
+              // 地点、状态和重复标识
               const SizedBox(height: 4),
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   if (widget.schedule.location != null &&
-                      widget.schedule.location!.isNotEmpty) ...[
-                    const Icon(Icons.location_on, size: 14, color: Colors.grey),
-                    const SizedBox(width: 4),
-                    Text(
-                      widget.schedule.location!,
-                      style: const TextStyle(fontSize: 14),
+                      widget.schedule.location!.isNotEmpty)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.location_on,
+                          size: 14,
+                          color: Colors.grey,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          widget.schedule.location!,
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 12),
-                  ],
                   _getStatusChip(),
+                  // 重复标识
+                  if (widget.schedule.parentId != null ||
+                      (widget.schedule.recurrence != null &&
+                          widget.schedule.recurrence!.isNotEmpty))
+                    _buildRecurrenceBadge(),
                 ],
               ),
 
@@ -432,8 +457,8 @@ class _ScheduleCardState extends State<ScheduleCard> {
         ],
 
         // 重复规则
-        if (widget.schedule.recurrence != null &&
-            widget.schedule.recurrence!.isNotEmpty) ...[
+        if (_getRecurrenceText() != null &&
+            _getRecurrenceText()!.isNotEmpty) ...[
           Row(
             children: [
               const Icon(Icons.repeat, size: 16, color: Colors.grey),
@@ -442,10 +467,7 @@ class _ScheduleCardState extends State<ScheduleCard> {
                 '重复：',
                 style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
               ),
-              Text(
-                widget.schedule.recurrence!,
-                style: const TextStyle(fontSize: 14),
-              ),
+              Text(_getRecurrenceText()!, style: const TextStyle(fontSize: 14)),
             ],
           ),
           const SizedBox(height: 8),
@@ -520,5 +542,157 @@ class _ScheduleCardState extends State<ScheduleCard> {
       default:
         return Colors.grey;
     }
+  }
+
+  // 检查是否有提醒
+  bool _hasReminders() {
+    return widget.schedule.reminders != null &&
+        widget.schedule.reminders!.isNotEmpty;
+  }
+
+  // 构建提醒信息
+  Widget _buildReminderInfo() {
+    if (!_hasReminders()) return const SizedBox.shrink();
+
+    final reminders = widget.schedule.reminders!;
+    final now = DateTime.now();
+
+    // 统计已提醒和待提醒的数量
+    int remindedCount = 0;
+    int pendingCount = 0;
+    DateTime? nextRemindTime;
+
+    for (var reminder in reminders) {
+      final reminded = reminder['reminded'] ?? false;
+      if (reminded) {
+        remindedCount++;
+      } else {
+        pendingCount++;
+        final remindAt = DateTime.parse(reminder['remindAt']).toLocal();
+        if (nextRemindTime == null || remindAt.isBefore(nextRemindTime)) {
+          nextRemindTime = remindAt;
+        }
+      }
+    }
+
+    return Row(
+      children: [
+        const Icon(Icons.notifications_active, size: 14, color: Colors.orange),
+        const SizedBox(width: 4),
+        if (pendingCount > 0 && nextRemindTime != null) ...[
+          Text(
+            _formatRemindTime(nextRemindTime, now),
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.orange,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ] else if (remindedCount > 0) ...[
+          Text('已提醒', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+        ],
+        if (reminders.length > 1) ...[
+          const SizedBox(width: 4),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+            decoration: BoxDecoration(
+              color: Colors.orange.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              '${reminders.length}',
+              style: const TextStyle(
+                fontSize: 10,
+                color: Colors.orange,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  // 格式化提醒时间
+  String _formatRemindTime(DateTime remindTime, DateTime now) {
+    final diff = remindTime.difference(now);
+
+    if (diff.isNegative) {
+      return '应提醒';
+    } else if (diff.inMinutes < 60) {
+      return '${diff.inMinutes}分钟后提醒';
+    } else if (diff.inHours < 24) {
+      return '${diff.inHours}小时后提醒';
+    } else if (diff.inDays == 1) {
+      return '明天提醒';
+    } else if (diff.inDays < 7) {
+      return '${diff.inDays}天后提醒';
+    } else {
+      return _formatDate(remindTime);
+    }
+  }
+
+  // 格式化日期
+  String _formatDate(DateTime date) {
+    return '${date.month}/${date.day} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  // 构建重复标识徽章
+  Widget _buildRecurrenceBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.purple.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.repeat, size: 12, color: Colors.purple),
+          const SizedBox(width: 4),
+          Text(
+            '重复',
+            style: TextStyle(
+              fontSize: 10,
+              color: Colors.purple[700],
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          if (widget.schedule.iterationIndex != null) ...[
+            const SizedBox(width: 2),
+            Text(
+              '·${widget.schedule.iterationIndex}',
+              style: TextStyle(fontSize: 9, color: Colors.purple[600]),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// 解析 recurrence（支持 JSON 字符串或 RRULE），返回可读文本
+  String? _getRecurrenceText() {
+    final raw = widget.schedule.recurrence;
+    if (raw == null || raw.isEmpty) return null;
+
+    // 优先解析 JSON 格式
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        return RecurrenceRule.fromJson(decoded).toDisplayText();
+      }
+    } catch (_) {
+      // 忽略 JSON 解析失败
+    }
+
+    // 退回解析 RRULE 字符串
+    try {
+      return RecurrenceRule.fromRRule(raw).toDisplayText();
+    } catch (_) {
+      // 忽略
+    }
+
+    // 无法解析则原样返回
+    return raw;
   }
 }

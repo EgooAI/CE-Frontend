@@ -16,6 +16,9 @@ class Schedule {
   final String? attachments; // JSON string
   final String? daomengId;
   final int? remindBefore; // 提前提醒分钟数
+  final List<dynamic>? reminders; // 提醒列表
+  final String? parentId; // 重复日程模板 ID
+  final int? iterationIndex; // 第几次实例（从 1 开始）
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final bool isDaily;
@@ -38,6 +41,9 @@ class Schedule {
     this.attachments,
     this.daomengId,
     this.remindBefore,
+    this.reminders,
+    this.parentId,
+    this.iterationIndex,
     this.createdAt,
     this.updatedAt,
     this.isDaily = false,
@@ -48,7 +54,7 @@ class Schedule {
     // 需要使用 .toLocal() 转换回本地时区，保持正确的日期
     return Schedule(
       id: json['id'],
-      userId: json['userId'],
+      userId: json['userId'] ?? '', // 模板列表可能没有 userId
       title: json['title'],
       description: json['description'],
       // 转换为本地时区，确保日期正确
@@ -61,12 +67,16 @@ class Schedule {
       status: json['status'] ?? 'pending',
       type: json['type'],
       priority: json['priority'],
-      recurrence: json['recurrence'],
+      // 兼容后端返回的 rule（重复规则字段名）
+      recurrence: json['recurrence'] ?? json['rule'],
       participants: json['participants'],
       notes: json['notes'],
       attachments: json['attachments'],
       daomengId: json['daomengId'],
       remindBefore: json['remindBefore'],
+      reminders: json['reminders'],
+      parentId: json['parentId'],
+      iterationIndex: json['iterationIndex'],
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt']).toLocal()
           : null,
@@ -117,6 +127,9 @@ class Schedule {
       'attachments': attachments,
       'daomengId': daomengId,
       if (remindBefore != null) 'remindBefore': remindBefore,
+      if (reminders != null) 'reminders': reminders,
+      if (parentId != null) 'parentId': parentId,
+      if (iterationIndex != null) 'iterationIndex': iterationIndex,
       'createdAt': createdAt != null ? formatDateTime(createdAt!) : null,
       'updatedAt': updatedAt != null ? formatDateTime(updatedAt!) : null,
     };

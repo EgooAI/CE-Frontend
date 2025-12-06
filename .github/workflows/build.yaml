@@ -3,8 +3,6 @@ name: Flutter Multi-Platform Build
 on:
   push:
     branches: ["master"]
-  pull_request:
-    branches: ["master"]
   workflow_dispatch: # 允许手动触发
 
 jobs:
@@ -16,6 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Get short commit hash
+        id: commit
+        run: echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -35,11 +37,16 @@ jobs:
       - name: Build APK
         run: flutter build apk --release --dart-define=API_URL="${{ secrets.API_URL }}"
 
+      - name: Rename APK
+        run: |
+          mv build/app/outputs/flutter-apk/app-release.apk chrono-android-${{ steps.commit.outputs.short_sha }}.apk
+
       - name: Upload Android Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: android-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: chrono-android-${{ steps.commit.outputs.short_sha }}
+          path: chrono-android-${{ steps.commit.outputs.short_sha }}.apk
+          if-no-files-found: error
 
   # -------------------------
   # Job 2: iOS Build (Unsigned)
@@ -49,6 +56,10 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Get short commit hash
+        id: commit
+        run: echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -75,14 +86,15 @@ jobs:
           # 将构建生成的 Runner.app 移动到 Payload 文件夹中
           mv build/ios/iphoneos/Runner.app Payload
           # 压缩 Payload 文件夹为 .ipa 文件
-          zip -r ios_app_unsigned.ipa Payload
+          zip -r chrono-ios-${{ steps.commit.outputs.short_sha }}.ipa Payload
 
       # 3. 上传 IPA
       - name: Upload iOS Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ios-unsigned-ipa
-          path: ios_app_unsigned.ipa
+          name: chrono-ios-${{ steps.commit.outputs.short_sha }}
+          path: chrono-ios-${{ steps.commit.outputs.short_sha }}.ipa
+          if-no-files-found: error
 
   # -------------------------
   # Job 3: macOS Build
@@ -92,6 +104,10 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Get short commit hash
+        id: commit
+        run: echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -111,13 +127,14 @@ jobs:
       - name: Compress macOS App
         run: |
           cd build/macos/Build/Products/Release
-          tar -czf macos_app.tar.gz *.app
+          tar -czf ../../../chrono-macos-${{ steps.commit.outputs.short_sha }}.app.tar.gz *.app
 
       - name: Upload macOS Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: macos-release-app
-          path: build/macos/Build/Products/Release/macos_app.tar.gz
+          name: chrono-macos-${{ steps.commit.outputs.short_sha }}
+          path: build/macos/Build/Products/chrono-macos-${{ steps.commit.outputs.short_sha }}.app.tar.gz
+          if-no-files-found: error
 
   # -------------------------
   # Job 4: Windows Build
@@ -127,6 +144,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Get short commit hash
+        id: commit
+        run: echo "short_sha=$(git rev-parse --short HEAD)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -145,10 +166,11 @@ jobs:
 
       - name: Compress Windows Build
         # PowerShell 压缩命令
-        run: Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath windows_app.zip
+        run: Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath chrono-windows-${{ steps.commit.outputs.short_sha }}.zip
 
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: windows-release-app
-          path: windows_app.zip
+          name: chrono-windows-${{ steps.commit.outputs.short_sha }}
+          path: chrono-windows-${{ steps.commit.outputs.short_sha }}.zip
+          if-no-files-found: error

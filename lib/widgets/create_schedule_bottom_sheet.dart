@@ -1,5 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../models/schedule.dart';
+import '../models/recurrence_rule.dart';
+import 'recurrence_editor.dart';
 
 /// 创建/编辑日程底部抽屉
 ///
@@ -48,6 +51,7 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
   String? _priority = 'medium';
   String? _type = 'task';
   int? _remindBefore; // 提前提醒分钟数
+  RecurrenceRule? _recurrenceRule; // 重复规则
 
   bool _isLoading = false;
   String? _validationError; // 验证错误提示
@@ -73,7 +77,32 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
       _status = schedule.status;
       _priority = schedule.priority ?? 'medium';
       _type = schedule.type ?? 'task';
-      _remindBefore = schedule.remindBefore;
+      _remindBefore =
+          schedule.remindBefore ??
+          _computeRemindBeforeFromReminders(
+            schedule.reminders,
+            schedule.startTime,
+          );
+      // 解析已有的重复规则（支持 JSON 字符串或 RRULE 字符串）
+      if (schedule.recurrence != null && schedule.recurrence!.isNotEmpty) {
+        try {
+          // 首先尝试解析 JSON 格式
+          final decoded = jsonDecode(schedule.recurrence!);
+          if (decoded is Map<String, dynamic>) {
+            _recurrenceRule = RecurrenceRule.fromJson(decoded);
+          } else {
+            // 如果不是 Map，尝试作为 RRULE 字符串解析
+            _recurrenceRule = RecurrenceRule.fromRRule(schedule.recurrence!);
+          }
+        } catch (_) {
+          // JSON 解析失败，尝试 RRULE 格式
+          try {
+            _recurrenceRule = RecurrenceRule.fromRRule(schedule.recurrence!);
+          } catch (_) {
+            // 都失败，保持为空
+          }
+        }
+      }
     } else if (widget.initialData != null) {
       // AI 预填充模式
       final data = widget.initialData!;
@@ -95,12 +124,80 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
       _priority = data['priority'] ?? 'medium';
       _type = data['type'] ?? 'task';
       _remindBefore = data['remindBefore'];
+      if (_remindBefore == null && data['reminders'] is List) {
+        final computed = _computeRemindBeforeFromReminders(
+          data['reminders'] as List<dynamic>,
+          _startTime,
+        );
+        _remindBefore = computed;
+      }
+      // 解析重复规则（支持 JSON Map、JSON 字符串、RRULE 字符串）
+      if (data['recurrence'] is Map<String, dynamic>) {
+        try {
+          _recurrenceRule = RecurrenceRule.fromJson(
+            data['recurrence'] as Map<String, dynamic>,
+          );
+        } catch (e) {
+          // 解析失败，忽略
+        }
+      } else if (data['recurrence'] is String &&
+          (data['recurrence'] as String).isNotEmpty) {
+        try {
+          // 首先尝试解析 JSON 字符串格式
+          final decoded = jsonDecode(data['recurrence'] as String);
+          if (decoded is Map<String, dynamic>) {
+            _recurrenceRule = RecurrenceRule.fromJson(decoded);
+          } else {
+            // 不是 JSON，尝试 RRULE 格式
+            _recurrenceRule = RecurrenceRule.fromRRule(
+              data['recurrence'] as String,
+            );
+          }
+        } catch (_) {
+          // JSON 解析失败，尝试 RRULE 格式
+          try {
+            _recurrenceRule = RecurrenceRule.fromRRule(
+              data['recurrence'] as String,
+            );
+          } catch (_) {
+            // 都失败，忽略
+          }
+        }
+      }
     } else {
       // 创建模式：使用默认值
       final initialDate = widget.initialDate ?? DateTime.now();
       _startTime = _getSmartStartTime(initialDate);
       _endTime = null;
     }
+  }
+
+  /// 根据提醒列表和开始时间计算提前提醒分钟数（取最早的一条提醒）
+  int? _computeRemindBeforeFromReminders(
+    List<dynamic>? reminders,
+    DateTime? start,
+  ) {
+    if (reminders == null || reminders.isEmpty || start == null) return null;
+
+    DateTime? earliest;
+    for (final item in reminders) {
+      final remindAtStr = item is Map<String, dynamic>
+          ? item['remindAt']
+          : null;
+      if (remindAtStr is String && remindAtStr.isNotEmpty) {
+        final remindAt = DateTime.tryParse(remindAtStr)?.toLocal();
+        if (remindAt != null) {
+          if (earliest == null || remindAt.isBefore(earliest)) {
+            earliest = remindAt;
+          }
+        }
+      }
+    }
+
+    if (earliest == null) return null;
+    final diffMinutes = start.difference(earliest).inMinutes;
+    if (diffMinutes <= 0) return null; // 不提前或数据异常
+    return diffMinutes;
   }
 
   /// 智能设置开始时间
@@ -271,6 +368,9 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
             ? null
             : _participantsController.text.trim(),
         remindBefore: _remindBefore,
+        recurrence: _recurrenceRule != null
+            ? jsonEncode(_recurrenceRule!.toJson())
+            : null,
       );
 
       widget.onSave(schedule);
@@ -369,6 +469,16 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
                       _buildDescriptionField(),
                       const SizedBox(height: 16),
                       _buildNotesField(),
+                      const SizedBox(height: 16),
+                      // 重复规则编辑器
+                      RecurrenceEditor(
+                        initialRule: _recurrenceRule,
+                        onChanged: (rule) {
+                          setState(() {
+                            _recurrenceRule = rule;
+                          });
+                        },
+                      ),
                     ],
                   ),
                 ),

@@ -16,18 +16,13 @@ class AuthService {
         '/login',
         data: {'username': username, 'password': password},
       );
-
-      if (response.statusCode == 200) {
-        final authResponse = AuthResponse.fromJson(response.data);
-        await _saveToken(authResponse.token);
-        await _saveUser(authResponse.user);
-        ApiClient.setToken(authResponse.token);
-        return authResponse;
-      } else {
-        throw Exception('登录失败: ${response.data}');
-      }
+      final authResponse = AuthResponse.fromJson(response.data);
+      await _saveToken(authResponse.token);
+      await _saveUser(authResponse.user);
+      ApiClient.setToken(authResponse.token);
+      return authResponse;
     } on DioException catch (e) {
-      throw Exception('登录失败: ${e.response?.data ?? e.message}');
+      throw Exception(e.message ?? '登录失败');
     }
   }
 
@@ -41,18 +36,13 @@ class AuthService {
         '/register',
         data: {'email': email, 'username': username, 'password': password},
       );
-
-      if (response.statusCode == 201) {
-        final authResponse = AuthResponse.fromJson(response.data);
-        await _saveToken(authResponse.token);
-        await _saveUser(authResponse.user);
-        ApiClient.setToken(authResponse.token);
-        return authResponse;
-      } else {
-        throw Exception('注册失败: ${response.data}');
-      }
+      final authResponse = AuthResponse.fromJson(response.data);
+      await _saveToken(authResponse.token);
+      await _saveUser(authResponse.user);
+      ApiClient.setToken(authResponse.token);
+      return authResponse;
     } on DioException catch (e) {
-      throw Exception('注册失败: ${e.response?.data ?? e.message}');
+      throw Exception(e.message ?? '注册失败');
     }
   }
 
@@ -103,37 +93,25 @@ class AuthService {
   Future<User> getProfile() async {
     try {
       final response = await ApiClient.instance.get('/profile');
-      if (response.statusCode == 200) {
-        final userData = response.data['user'];
-        final user = User.fromJson(userData);
-        await _saveUser(user);
-        return user;
-      } else {
-        throw Exception('获取用户信息失败: ${response.data}');
-      }
+      final userData = response.data['user'];
+      final user = User.fromJson(userData);
+      await _saveUser(user);
+      return user;
     } on DioException catch (e) {
-      throw Exception('获取用户信息失败: ${e.response?.data ?? e.message}');
+      throw Exception(e.message ?? '获取用户信息失败');
     }
   }
 
   Future<User> updateEmail(String newEmail, String currentPassword) async {
     try {
-      final response = await ApiClient.instance.put(
+      await ApiClient.instance.put(
         '/profile',
         data: {'email': newEmail, 'currentPassword': currentPassword},
       );
-
-      if (response.statusCode == 200) {
-        // 更新成功后，重新获取完整的用户信息
-        return await getProfile();
-      } else {
-        throw Exception('更新邮箱失败: ${response.data}');
-      }
+      // 更新成功后，重新获取完整的用户信息
+      return await getProfile();
     } on DioException catch (e) {
-      if (e.response?.statusCode == 409) {
-        throw Exception('该邮箱已被使用');
-      }
-      throw Exception('更新邮箱失败: ${e.response?.data ?? e.message}');
+      throw Exception(e.message ?? '更新邮箱失败');
     }
   }
 
@@ -142,24 +120,13 @@ class AuthService {
     String currentPassword,
   ) async {
     try {
-      final response = await ApiClient.instance.put(
+      await ApiClient.instance.put(
         '/profile',
         data: {'username': newUsername, 'currentPassword': currentPassword},
       );
-
-      if (response.statusCode == 200) {
-        return await getProfile();
-      } else {
-        throw Exception('更新用户名失败: ${response.data}');
-      }
+      return await getProfile();
     } on DioException catch (e) {
-      if (e.response?.statusCode == 409) {
-        throw Exception('该用户名已被使用');
-      }
-      if (e.response?.statusCode == 401) {
-        throw Exception('密码错误');
-      }
-      throw Exception('更新用户名失败: ${e.response?.data ?? e.message}');
+      throw Exception(e.message ?? '更新用户名失败');
     }
   }
 
@@ -168,34 +135,20 @@ class AuthService {
     String newPassword,
   ) async {
     try {
-      final response = await ApiClient.instance.put(
+      await ApiClient.instance.put(
         '/profile',
         data: {'password': newPassword, 'currentPassword': currentPassword},
       );
-
-      if (response.statusCode != 200) {
-        throw Exception('更新密码失败: ${response.data}');
-      }
     } on DioException catch (e) {
-      if (e.response?.statusCode == 401) {
-        throw Exception('当前密码错误');
-      }
-      throw Exception('更新密码失败: ${e.response?.data ?? e.message}');
+      throw Exception(e.message ?? '更新密码失败');
     }
   }
 
   Future<void> updateUserConfig(UserConfig config) async {
     try {
-      final response = await ApiClient.instance.put(
-        '/profile/config',
-        data: config.toJson(),
-      );
-
-      if (response.statusCode != 200) {
-        throw Exception('更新用户配置失败: ${response.data}');
-      }
+      await ApiClient.instance.put('/profile/config', data: config.toJson());
     } on DioException catch (e) {
-      throw Exception('更新用户配置失败: ${e.response?.data ?? e.message}');
+      throw Exception(e.message ?? '更新用户配置失败');
     }
   }
 }

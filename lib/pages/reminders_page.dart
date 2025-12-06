@@ -180,7 +180,7 @@ class _RemindersPageState extends State<RemindersPage> {
   Widget _buildReminderCard(Reminder reminder) {
     final now = DateTime.now();
     final isPast = reminder.remindAt.isBefore(now);
-    final isFuture = reminder.remindAt.isAfter(now);
+    final schedule = reminder.schedule;
 
     // 计算时间差
     String timeText;
@@ -197,7 +197,7 @@ class _RemindersPageState extends State<RemindersPage> {
       } else {
         timeText = '刚刚已提醒';
       }
-    } else if (isFuture) {
+    } else if (!isPast) {
       timeColor = Colors.orange;
       final diff = reminder.remindAt.difference(now);
       if (diff.inDays > 0) {
@@ -214,53 +214,191 @@ class _RemindersPageState extends State<RemindersPage> {
       timeText = '未提醒';
     }
 
+    // 获取状态颜色
+    Color statusColor = _getStatusColor(schedule?.status ?? '');
+    String statusText = _getStatusText(schedule?.status ?? '');
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       elevation: 2,
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: reminder.reminded
-              ? Colors.green[100]
-              : isPast
-              ? Colors.red[100]
-              : Colors.orange[100],
-          child: Icon(
-            reminder.reminded
-                ? Icons.check_circle
-                : isPast
-                ? Icons.warning
-                : Icons.schedule,
-            color: reminder.reminded
-                ? Colors.green
-                : isPast
-                ? Colors.red
-                : Colors.orange,
+      child: InkWell(
+        onTap: () => _showReminderDetails(reminder),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 左侧图标
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: reminder.reminded
+                    ? Colors.green[100]
+                    : isPast
+                    ? Colors.red[100]
+                    : Colors.orange[100],
+                child: Icon(
+                  reminder.reminded
+                      ? Icons.check_circle
+                      : isPast
+                      ? Icons.warning
+                      : Icons.schedule,
+                  color: reminder.reminded
+                      ? Colors.green
+                      : isPast
+                      ? Colors.red
+                      : Colors.orange,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 12),
+              // 主体内容
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 日程标题
+                    Text(
+                      schedule?.title ?? '无标题',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 6),
+                    // 提醒时间
+                    Row(
+                      children: [
+                        Icon(Icons.alarm, size: 14, color: Colors.grey[600]),
+                        const SizedBox(width: 4),
+                        Text(
+                          _formatDateTime(reminder.remindAt),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    // 状态和时间差
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: timeColor.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            timeText,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: timeColor,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        if (schedule != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: statusColor.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              statusText,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: statusColor,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    // 日程描述
+                    if (schedule?.description != null &&
+                        schedule!.description!.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        schedule.description!,
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                    // 地点
+                    if (schedule?.location != null &&
+                        schedule!.location!.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(Icons.place, size: 12, color: Colors.grey[500]),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              schedule.location!,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey[600],
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              // 右侧指示器
+              const Icon(Icons.chevron_right, color: Colors.grey),
+            ],
           ),
         ),
-        title: Text(
-          _formatDateTime(reminder.remindAt),
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 4),
-            Text(timeText, style: TextStyle(color: timeColor, fontSize: 12)),
-            const SizedBox(height: 2),
-            Text(
-              '日程 ID: ${reminder.scheduleId.substring(0, 8)}...',
-              style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-            ),
-          ],
-        ),
-        trailing: reminder.reminded
-            ? const Icon(Icons.done, color: Colors.green)
-            : null,
-        onTap: () {
-          _showReminderDetails(reminder);
-        },
       ),
     );
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'completed':
+        return Colors.green;
+      case 'in_progress':
+        return Colors.blue;
+      case 'cancelled':
+        return Colors.grey;
+      case 'pending':
+      default:
+        return Colors.orange;
+    }
+  }
+
+  String _getStatusText(String status) {
+    switch (status) {
+      case 'completed':
+        return '已完成';
+      case 'in_progress':
+        return '进行中';
+      case 'cancelled':
+        return '已取消';
+      case 'pending':
+        return '待办';
+      default:
+        return '未知';
+    }
   }
 
   String _formatDateTime(DateTime dateTime) {
@@ -269,26 +407,91 @@ class _RemindersPageState extends State<RemindersPage> {
   }
 
   void _showReminderDetails(Reminder reminder) {
+    final schedule = reminder.schedule;
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('提醒详情'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+        title: Row(
           children: [
-            _buildDetailRow('提醒 ID', reminder.id),
-            _buildDetailRow('日程 ID', reminder.scheduleId),
-            _buildDetailRow('提醒时间', _formatDateTime(reminder.remindAt)),
-            _buildDetailRow(
-              '状态',
-              reminder.reminded ? '已提醒' : '待提醒',
-              valueColor: reminder.reminded ? Colors.green : Colors.orange,
+            Icon(
+              reminder.reminded ? Icons.check_circle : Icons.schedule,
+              color: reminder.reminded ? Colors.green : Colors.orange,
             ),
-            _buildDetailRow('创建时间', _formatDateTime(reminder.createdAt)),
+            const SizedBox(width: 8),
+            const Expanded(child: Text('提醒详情')),
           ],
         ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 提醒信息
+              const Text(
+                '🔔 提醒信息',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const Divider(),
+              _buildDetailRow('提醒时间', _formatDateTime(reminder.remindAt)),
+              _buildDetailRow(
+                '提醒状态',
+                reminder.reminded ? '✅ 已提醒' : '⏰ 待提醒',
+                valueColor: reminder.reminded ? Colors.green : Colors.orange,
+              ),
+              _buildDetailRow('创建时间', _formatDateTime(reminder.createdAt)),
+
+              // 日程信息
+              if (schedule != null) ...[
+                const SizedBox(height: 16),
+                const Text(
+                  '📅 关联日程',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const Divider(),
+                _buildDetailRow('标题', schedule.title),
+                if (schedule.description != null &&
+                    schedule.description!.isNotEmpty)
+                  _buildDetailRow('描述', schedule.description!),
+                _buildDetailRow('开始时间', _formatDateTime(schedule.startTime)),
+                if (schedule.endTime != null)
+                  _buildDetailRow('结束时间', _formatDateTime(schedule.endTime!)),
+                if (schedule.location != null && schedule.location!.isNotEmpty)
+                  _buildDetailRow('地点', schedule.location!),
+                _buildDetailRow(
+                  '状态',
+                  _getStatusText(schedule.status),
+                  valueColor: _getStatusColor(schedule.status),
+                ),
+                _buildDetailRow(
+                  '优先级',
+                  _getPriorityText(schedule.priority ?? 'medium'),
+                  valueColor: _getPriorityColor(schedule.priority ?? 'medium'),
+                ),
+                _buildDetailRow('类型', _getTypeText(schedule.type ?? 'task')),
+              ] else ...[
+                const SizedBox(height: 16),
+                Text(
+                  '⚠️ 关联的日程不存在或已被删除',
+                  style: TextStyle(color: Colors.grey[600]),
+                ),
+              ],
+            ],
+          ),
+        ),
         actions: [
+          if (schedule != null)
+            TextButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                // 跳转到日历页面
+                if (context.mounted) {
+                  DefaultTabController.of(context).animateTo(0);
+                }
+              },
+              icon: const Icon(Icons.calendar_today),
+              label: const Text('查看日程'),
+            ),
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('关闭'),
@@ -296,6 +499,47 @@ class _RemindersPageState extends State<RemindersPage> {
         ],
       ),
     );
+  }
+
+  String _getPriorityText(String priority) {
+    switch (priority) {
+      case 'high':
+        return '高';
+      case 'medium':
+        return '中';
+      case 'low':
+        return '低';
+      default:
+        return '普通';
+    }
+  }
+
+  Color _getPriorityColor(String priority) {
+    switch (priority) {
+      case 'high':
+        return Colors.red;
+      case 'medium':
+        return Colors.orange;
+      case 'low':
+        return Colors.blue;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String _getTypeText(String type) {
+    switch (type) {
+      case 'meeting':
+        return '会议';
+      case 'task':
+        return '任务';
+      case 'event':
+        return '事件';
+      case 'reminder':
+        return '提醒';
+      default:
+        return '其他';
+    }
   }
 
   Widget _buildDetailRow(String label, String value, {Color? valueColor}) {

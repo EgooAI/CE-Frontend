@@ -7,6 +7,7 @@ import 'pages/edit_email_page.dart';
 import 'pages/edit_username_page.dart';
 import 'pages/edit_password_page.dart';
 import 'pages/reminders_page.dart'; // ignore: unused_import
+import 'pages/recurring_schedules_page.dart';
 import 'services/auth_service.dart';
 import 'models/user.dart';
 
@@ -133,6 +134,7 @@ class _MyAppState extends State<MyApp> {
       routes: {
         '/login': (context) => const LoginPage(),
         '/reminders': (context) => const RemindersPage(),
+        '/recurring-schedules': (context) => const RecurringSchedulesPage(),
       },
       onGenerateRoute: (settings) {
         if (settings.name == '/edit-email') {

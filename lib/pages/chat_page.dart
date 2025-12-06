@@ -129,14 +129,32 @@ class _ChatPageState extends State<ChatPage> {
 
   Future<void> _sendMessage() async {
     if (_controller.text.trim().isEmpty) return;
-    if (_currentConversation == null) {
-      // 如果没有当前对话，先创建一个默认对话
-      await _createDefaultConversation();
-      if (_currentConversation == null) return;
-    }
 
     final content = _controller.text;
     _controller.clear();
+
+    if (_currentConversation == null) {
+      // 如果没有当前对话，先创建一个默认对话
+      try {
+        final conversation = await _conversationService.createConversation(
+          "新对话",
+        );
+        setState(() {
+          _conversations.insert(0, conversation);
+          _currentConversation = conversation;
+          _messages = [];
+        });
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('创建对话失败: $e')));
+        }
+        // 恢复输入内容
+        _controller.text = content;
+        return;
+      }
+    }
 
     // 添加临时用户消息
     final tempUserMessage = Message(
@@ -337,9 +355,14 @@ class _ChatPageState extends State<ChatPage> {
               } else if (event.type == 'error') {
                 // 错误处理
                 final errorData = event.data as Map<String, dynamic>;
+                final errorMsg = errorData['message'] ?? '未知错误';
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('错误: ${errorData['message']}')),
+                    SnackBar(
+                      content: Text('错误: $errorMsg'),
+                      backgroundColor: Colors.red,
+                      duration: const Duration(seconds: 5),
+                    ),
                   );
                 }
                 // 移除临时 AI 消息
@@ -352,11 +375,20 @@ class _ChatPageState extends State<ChatPage> {
             },
             onError: (e) {
               if (mounted) {
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(content: Text('流式发送失败: $e')));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('流式发送失败: $e'),
+                    backgroundColor: Colors.red,
+                    duration: const Duration(seconds: 5),
+                  ),
+                );
               }
-              setState(() => _isSending = false);
+              // 移除临时 AI 消息
+              setState(() {
+                _messages.removeWhere((m) => m.id == tempAiMessageId);
+                _streamingThoughts = [];
+                _isSending = false;
+              });
             },
             onDone: () {
               if (mounted) setState(() => _isSending = false);
@@ -414,7 +446,7 @@ class _ChatPageState extends State<ChatPage> {
               ),
             );
 
-            // 可选：询问用户是否跳转到日历页面
+            // 询问用户是否跳转到日历页面
             final shouldNavigate = await showDialog<bool>(
               context: context,
               builder: (context) => AlertDialog(

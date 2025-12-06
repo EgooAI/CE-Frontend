@@ -133,6 +133,15 @@ class _ProfilePageState extends State<ProfilePage> {
               },
             ),
             ListTile(
+              leading: const Icon(Icons.repeat),
+              title: const Text('我的重复事件'),
+              subtitle: const Text('查看所有重复日程模板'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.pushNamed(context, '/recurring-schedules');
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.calendar_today),
               title: const Text('日常事项在日历中显示'),
               trailing: Switch(

@@ -10,7 +10,7 @@ class ReminderService {
       final response = await ApiClient.instance.get('/schedules/reminders');
       return RemindersResponse.fromJson(response.data);
     } on DioException catch (e) {
-      throw Exception('获取提醒列表失败: ${e.message}');
+      throw Exception(e.message ?? '获取提醒列表失败');
     }
   }
 }
