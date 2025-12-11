@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/reminder.dart';
 import '../services/reminder_service.dart';
+import '../main.dart' show mainPageKey;
 
 /// 提醒列表页面
 class RemindersPage extends StatefulWidget {
@@ -483,11 +484,27 @@ class _RemindersPageState extends State<RemindersPage> {
           if (schedule != null)
             TextButton.icon(
               onPressed: () {
+                // 关闭对话框
                 Navigator.pop(context);
-                // 跳转到日历页面
-                if (context.mounted) {
-                  DefaultTabController.of(context).animateTo(0);
-                }
+
+                // 关闭 RemindersPage，回到 MainPage
+                Navigator.pop(context);
+
+                // 延迟执行，确保返回到 MainPage 后再操作
+                Future.delayed(const Duration(milliseconds: 200), () {
+                  try {
+                    // 直接通过全局 mainPageKey 访问 MainPage 状态
+                    final mainPageState = mainPageKey.currentState;
+                    if (mainPageState != null) {
+                      // 调用 MainPage 的 navigateToScheduleDate 方法
+                      (mainPageState as dynamic).navigateToScheduleDate(
+                        schedule.startTime,
+                      );
+                    }
+                  } catch (e) {
+                    print('导航失败: $e');
+                  }
+                });
               },
               icon: const Icon(Icons.calendar_today),
               label: const Text('查看日程'),

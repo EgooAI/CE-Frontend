@@ -15,6 +15,9 @@ import 'models/user.dart';
 // 全局 Navigator Key，用于 401 拦截跳转
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
+// 全局 MainPage Key，用于访问 MainPage 的状态
+final GlobalKey mainPageKey = GlobalKey();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -137,7 +140,7 @@ class _MyAppState extends State<MyApp> {
       supportedLocales: const [Locale('zh', 'CN'), Locale('en', 'US')],
       locale: const Locale('zh', 'CN'),
       home: _isLoggedIn && _user != null
-          ? MainPage(user: _user!)
+          ? MainPage(key: mainPageKey, user: _user!)
           : const LoginPage(),
       routes: {
         '/login': (context) => const LoginPage(),

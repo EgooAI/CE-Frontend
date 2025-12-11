@@ -40,6 +40,25 @@ class _MainPageState extends State<MainPage> {
     }
   }
 
+  // 导航到日程的指定日期
+  void navigateToScheduleDate(DateTime date) {
+    // 先切换到日历页面
+    switchToPage(1);
+
+    // 延迟一下确保页面已切换
+    Future.delayed(const Duration(milliseconds: 100), () {
+      // 获取日历页面状态并跳转到指定日期
+      final calendarState = _pageKeys[1].currentState;
+      if (calendarState != null && calendarState.mounted) {
+        try {
+          (calendarState as dynamic).jumpToDate(date);
+        } catch (e) {
+          print('跳转日期失败: $e');
+        }
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(

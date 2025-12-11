@@ -65,11 +65,21 @@ class ApiClient {
 
               // 检查是否是统一响应格式
               if (data.containsKey('code') && data.containsKey('message')) {
-                final code = data['code'] as int;
-                final message = data['message'] as String;
+                final code = data['code'];
+                final message = data['message'];
+
+                // 安全的类型检查和转换
+                if (code is! int || message is! String) {
+                  print(
+                    'ApiClient: 响应格式错误 - code 类型: ${code.runtimeType}, message 类型: ${message.runtimeType}',
+                  );
+                  handler.next(response);
+                  return;
+                }
 
                 // 如果 code 不是成功状态，抛出异常
                 if (code != 200 && code != 201 && code != 0) {
+                  print('ApiClient: 响应错误 - code: $code, message: $message');
                   handler.reject(
                     DioException(
                       requestOptions: response.requestOptions,
@@ -83,9 +93,12 @@ class ApiClient {
                 }
 
                 // 将 data 字段提取出来作为响应数据
-                // 如果 data 为 null，保持原样
-                if (data.containsKey('data')) {
+                // 如果 data 为 null 或不存在，保持为 null（而不是原始响应）
+                if (data.containsKey('data') && data['data'] != null) {
                   response.data = data['data'];
+                } else {
+                  // 没有 data 字段，设置为空 Map（避免 null 导致的类型错误）
+                  response.data = {};
                 }
               }
             }

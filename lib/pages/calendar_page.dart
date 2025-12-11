@@ -47,6 +47,14 @@ class _CalendarPageState extends State<CalendarPage> {
     _loadSchedules();
   }
 
+  // 公开的方法：跳转到指定日期
+  void jumpToDate(DateTime date) {
+    setState(() {
+      _focusedDay = date;
+      _selectedDay = date;
+    });
+  }
+
   // 加载日程数据
   Future<void> _loadSchedules() async {
     setState(() {

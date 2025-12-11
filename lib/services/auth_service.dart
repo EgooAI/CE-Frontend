@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:ce_frontend/models/user_config.dart';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -30,18 +31,36 @@ class AuthService {
           'deviceId': deviceId,
         },
       );
-      final authResponse = AuthResponse.fromJson(response.data);
+      debugPrint('📱 登录响应数据: ${response.data}');
+
+      late AuthResponse authResponse;
+      try {
+        authResponse = AuthResponse.fromJson(
+          response.data as Map<String, dynamic>,
+        );
+      } catch (parseError) {
+        debugPrint('❌ 响应解析失败: $parseError');
+        debugPrint('❌ 响应类型: ${response.data.runtimeType}');
+        rethrow;
+      }
+
       await _saveTokens(
-        authResponse.token,
-        response.data['refresh_token'] as String?,
-        response.data['expires_in'] as int?,
-        response.data['refresh_expires_in'] as int?,
+        authResponse.accessToken,
+        authResponse.refreshToken,
+        authResponse.expiresIn,
+        authResponse.refreshExpiresIn,
       );
       await _saveUser(authResponse.user);
-      ApiClient.setToken(authResponse.token);
+      ApiClient.setToken(authResponse.accessToken);
       return authResponse;
     } on DioException catch (e) {
+      debugPrint('❌ 登录 DioException: ${e.message}');
+      debugPrint('❌ 响应状态码: ${e.response?.statusCode}');
+      debugPrint('❌ 响应体: ${e.response?.data}');
       throw Exception(e.message ?? '登录失败');
+    } catch (e) {
+      debugPrint('❌ 登录异常: $e');
+      throw Exception('登录失败: $e');
     }
   }
 
@@ -61,18 +80,36 @@ class AuthService {
           'deviceId': deviceId,
         },
       );
-      final authResponse = AuthResponse.fromJson(response.data);
+      debugPrint('📱 注册响应数据: ${response.data}');
+
+      late AuthResponse authResponse;
+      try {
+        authResponse = AuthResponse.fromJson(
+          response.data as Map<String, dynamic>,
+        );
+      } catch (parseError) {
+        debugPrint('❌ 响应解析失败: $parseError');
+        debugPrint('❌ 响应类型: ${response.data.runtimeType}');
+        rethrow;
+      }
+
       await _saveTokens(
-        authResponse.token,
-        response.data['refresh_token'] as String?,
-        response.data['expires_in'] as int?,
-        response.data['refresh_expires_in'] as int?,
+        authResponse.accessToken,
+        authResponse.refreshToken,
+        authResponse.expiresIn,
+        authResponse.refreshExpiresIn,
       );
       await _saveUser(authResponse.user);
-      ApiClient.setToken(authResponse.token);
+      ApiClient.setToken(authResponse.accessToken);
       return authResponse;
     } on DioException catch (e) {
+      debugPrint('❌ 注册 DioException: ${e.message}');
+      debugPrint('❌ 响应状态码: ${e.response?.statusCode}');
+      debugPrint('❌ 响应体: ${e.response?.data}');
       throw Exception(e.message ?? '注册失败');
+    } catch (e) {
+      debugPrint('❌ 注册异常: $e');
+      throw Exception('注册失败: $e');
     }
   }
 
