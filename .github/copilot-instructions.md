@@ -335,11 +335,15 @@ POST /api/email/verify-code
    - 🔲 创建/编辑/删除日程
    - 🔲 日程搜索和筛选
    - 🔲 月份数据懒加载优化
-3. 🔲 密码修改功能
-4. 🔲 用户名修改功能
-5. 🔲 头像上传功能
-6. 🔲 完善任务管理功能
-7. 🔲 完善聊天功能
+3. ✅ 聊天语音输入功能（已完成）
+   - ✅ iOS 平台集成（speech_to_text）
+   - ✅ Android/Web 平台集成（科大讯飞 WebSocket）
+   - 🔲 配置科大讯飞 API 凭证
+   - 🔲 测试三端语音识别功能
+4. 🔲 密码修改功能
+5. 🔲 用户名修改功能
+6. 🔲 头像上传功能
+7. 🔲 完善任务管理功能
 
 ### 中期计划
 
@@ -363,6 +367,7 @@ POST /api/email/verify-code
 ### 当前需要优化的问题
 
 - ⚠️ Kotlin Gradle 编译错误（偶发）
+
   - 解决方案：清理缓存、检查 Gradle 配置
   - 临时方案：`flutter clean && flutter pub get`
 
@@ -512,6 +517,23 @@ Closes #123
 ---
 
 ## 更新日志
+
+### 2025-12-10 - v1.4
+
+- ✅ **完成语音识别功能集成（大模型版）**
+- 实现平台差异化策略：iOS 使用 speech_to_text，Android+Web 使用科大讯飞实时语音转写大模型版
+- 创建 XunfeiAsrService（科大讯飞实时语音转写大模型版服务）
+  - 支持中英 + 202 种方言混合识别
+  - 使用 HMAC-SHA1 签名鉴权
+  - 直接发送二进制音频数据（优化性能）
+- 创建 AudioRecorderService（音频录制服务，支持 PCM 16kHz 16bit）
+- 在 ChatPage 集成麦克风按钮和实时语音识别
+- 添加 iOS 麦克风和语音识别权限配置
+- 实现 dart-define 环境变量管理方案
+- 创建 run.ps1 和 build.ps1 自动化脚本
+- 移除 vosk_flutter 依赖（Web 平台 FFI 不兼容）
+- 添加依赖：web_socket_channel, record, crypto
+- 创建详细集成文档 `.github/xfyun-voice-integration.md`
 
 ### 2025-11-21 - v1.3
 

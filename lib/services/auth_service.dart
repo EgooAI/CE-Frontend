@@ -5,19 +5,38 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/auth_response.dart';
 import '../models/user.dart';
 import 'api_client.dart';
+import 'device_service.dart';
 
 class AuthService {
   static const String _tokenKey = 'auth_token';
+  static const String _refreshTokenKey = 'refresh_token';
+  static const String _tokenExpiryKey = 'token_expiry';
+  static const String _refreshTokenExpiryKey = 'refresh_token_expiry';
   static const String _userKey = 'auth_user';
+
+  // 防止并发刷新
+  static Future<String>? _refreshingFuture;
+  // 防止重复登出
+  static bool _isLoggingOut = false;
 
   Future<AuthResponse> login(String username, String password) async {
     try {
+      final deviceId = await DeviceService.getDeviceId();
       final response = await ApiClient.instance.post(
         '/login',
-        data: {'username': username, 'password': password},
+        data: {
+          'username': username,
+          'password': password,
+          'deviceId': deviceId,
+        },
       );
       final authResponse = AuthResponse.fromJson(response.data);
-      await _saveToken(authResponse.token);
+      await _saveTokens(
+        authResponse.token,
+        response.data['refresh_token'] as String?,
+        response.data['expires_in'] as int?,
+        response.data['refresh_expires_in'] as int?,
+      );
       await _saveUser(authResponse.user);
       ApiClient.setToken(authResponse.token);
       return authResponse;
@@ -32,12 +51,23 @@ class AuthService {
     String password,
   ) async {
     try {
+      final deviceId = await DeviceService.getDeviceId();
       final response = await ApiClient.instance.post(
         '/register',
-        data: {'email': email, 'username': username, 'password': password},
+        data: {
+          'email': email,
+          'username': username,
+          'password': password,
+          'deviceId': deviceId,
+        },
       );
       final authResponse = AuthResponse.fromJson(response.data);
-      await _saveToken(authResponse.token);
+      await _saveTokens(
+        authResponse.token,
+        response.data['refresh_token'] as String?,
+        response.data['expires_in'] as int?,
+        response.data['refresh_expires_in'] as int?,
+      );
       await _saveUser(authResponse.user);
       ApiClient.setToken(authResponse.token);
       return authResponse;
@@ -47,10 +77,43 @@ class AuthService {
   }
 
   Future<void> logout() async {
+    // 防止重复登出
+    if (_isLoggingOut) return;
+    _isLoggingOut = true;
+
+    try {
+      // 尝试调用后端登出接口吊销 refresh_token
+      final refreshToken = await getRefreshToken();
+      final deviceId = await DeviceService.getDeviceId();
+
+      if (refreshToken != null) {
+        try {
+          await ApiClient.instance.post(
+            '/auth/logout',
+            data: {'refresh_token': refreshToken, 'deviceId': deviceId},
+          );
+        } catch (e) {
+          // 登出接口失败不影响本地清理
+          print('AuthService: 登出接口调用失败 - $e');
+        }
+      }
+    } finally {
+      // 无论如何都清理本地状态
+      await _clearLocalAuth();
+      _isLoggingOut = false;
+    }
+  }
+
+  /// 清理本地认证状态
+  Future<void> _clearLocalAuth() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_tokenKey);
+    await prefs.remove(_refreshTokenKey);
+    await prefs.remove(_tokenExpiryKey);
+    await prefs.remove(_refreshTokenExpiryKey);
     await prefs.remove(_userKey);
     ApiClient.clearToken();
+    print('AuthService: 本地认证状态已清理');
   }
 
   Future<String?> getToken() async {
@@ -58,9 +121,61 @@ class AuthService {
     return prefs.getString(_tokenKey);
   }
 
-  Future<void> _saveToken(String token) async {
+  /// 保存所有 token 和过期时间
+  Future<void> _saveTokens(
+    String accessToken,
+    String? refreshToken,
+    int? expiresIn,
+    int? refreshExpiresIn,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_tokenKey, token);
+    await prefs.setString(_tokenKey, accessToken);
+
+    if (refreshToken != null) {
+      await prefs.setString(_refreshTokenKey, refreshToken);
+    }
+
+    // 存储过期时间戳（当前时间 + 有效期）
+    if (expiresIn != null) {
+      final expiry = DateTime.now().millisecondsSinceEpoch + (expiresIn * 1000);
+      await prefs.setInt(_tokenExpiryKey, expiry);
+    }
+
+    if (refreshExpiresIn != null) {
+      final refreshExpiry =
+          DateTime.now().millisecondsSinceEpoch + (refreshExpiresIn * 1000);
+      await prefs.setInt(_refreshTokenExpiryKey, refreshExpiry);
+    }
+  }
+
+  /// 获取 refresh_token
+  Future<String?> getRefreshToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_refreshTokenKey);
+  }
+
+  /// 检查 access_token 是否即将过期（距离过期 < 5 分钟）
+  Future<bool> isTokenExpiringSoon() async {
+    final prefs = await SharedPreferences.getInstance();
+    final expiry = prefs.getInt(_tokenExpiryKey);
+
+    if (expiry == null) return false;
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final fiveMinutes = 5 * 60 * 1000;
+
+    return (expiry - now) < fiveMinutes;
+  }
+
+  /// 检查 refresh_token 是否已过期
+  Future<bool> isRefreshTokenExpired() async {
+    final prefs = await SharedPreferences.getInstance();
+    final refreshExpiry = prefs.getInt(_refreshTokenExpiryKey);
+
+    if (refreshExpiry == null) return true;
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    return now >= refreshExpiry;
   }
 
   Future<void> _saveUser(User user) async {
@@ -81,13 +196,114 @@ class AuthService {
     return null;
   }
 
+  /// 刷新访问令牌
+  /// 使用 refresh_token 获取新的 access_token 和 refresh_token
+  /// 支持并发防抖：多个请求同时触发时只刷新一次
+  Future<String> refreshAccessToken() async {
+    // 如果已经在刷新中，等待当前刷新完成
+    if (_refreshingFuture != null) {
+      print('AuthService: 等待当前刷新完成...');
+      return await _refreshingFuture!;
+    }
+
+    // 开始新的刷新流程
+    _refreshingFuture = _performRefresh();
+
+    try {
+      final newToken = await _refreshingFuture!;
+      return newToken;
+    } finally {
+      _refreshingFuture = null;
+    }
+  }
+
+  /// 执行实际的刷新操作
+  Future<String> _performRefresh() async {
+    try {
+      final refreshToken = await getRefreshToken();
+      final deviceId = await DeviceService.getDeviceId();
+
+      if (refreshToken == null) {
+        throw Exception('未找到 refresh_token');
+      }
+
+      // 检查 refresh_token 是否过期
+      if (await isRefreshTokenExpired()) {
+        throw Exception('refresh_token 已过期');
+      }
+
+      print('AuthService: 正在刷新 access_token...');
+
+      final response = await ApiClient.instance.post(
+        '/auth/refresh',
+        data: {'refresh_token': refreshToken, 'deviceId': deviceId},
+      );
+
+      final newAccessToken = response.data['access_token'] as String;
+      final newRefreshToken = response.data['refresh_token'] as String?;
+      final expiresIn = response.data['expires_in'] as int?;
+      final refreshExpiresIn = response.data['refresh_expires_in'] as int?;
+
+      // 保存新的 tokens
+      await _saveTokens(
+        newAccessToken,
+        newRefreshToken,
+        expiresIn,
+        refreshExpiresIn,
+      );
+
+      // 更新 API 客户端的 token
+      ApiClient.setToken(newAccessToken);
+
+      print('AuthService: Token 刷新成功');
+      return newAccessToken;
+    } on DioException catch (e) {
+      print('AuthService: Token 刷新失败 - ${e.message}');
+      // 刷新失败，清空本地状态
+      await _clearLocalAuth();
+      throw Exception('刷新令牌失败，请重新登录');
+    } catch (e) {
+      print('AuthService: Token 刷新异常 - $e');
+      await _clearLocalAuth();
+      rethrow;
+    }
+  }
+
+  /// 初始化认证状态
+  /// 启动时验证 token 有效性
   Future<bool> initAuth() async {
     final token = await getToken();
-    if (token != null) {
-      ApiClient.setToken(token);
-      return true;
+    if (token == null) {
+      print('AuthService: 未找到 token，跳过认证初始化');
+      return false;
     }
-    return false;
+
+    // 设置 token 到 API 客户端
+    ApiClient.setToken(token);
+
+    // 检查是否需要刷新 token
+    if (await isTokenExpiringSoon()) {
+      print('AuthService: Token 即将过期，尝试刷新...');
+      try {
+        await refreshAccessToken();
+        return true;
+      } catch (e) {
+        print('AuthService: 刷新失败 - $e');
+        return false;
+      }
+    }
+
+    // 验证 token 有效性（调用后端接口）
+    try {
+      await getProfile();
+      print('AuthService: Token 验证成功');
+      return true;
+    } catch (e) {
+      print('AuthService: Token 验证失败 - $e');
+      // Token 无效，清空本地状态
+      await _clearLocalAuth();
+      return false;
+    }
   }
 
   Future<User> getProfile() async {

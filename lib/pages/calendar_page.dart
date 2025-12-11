@@ -924,8 +924,9 @@ class _CalendarHeaderDelegate extends SliverPersistentHeaderDelegate {
                   height: _rowHeight * _showRowsCount, // 6行高度
                   child: TableCalendar<Schedule>(
                     locale: 'zh_CN',
+                    startingDayOfWeek: StartingDayOfWeek.monday,
                     firstDay: DateTime.utc(2020, 1, 1),
-                    lastDay: DateTime.utc(2030, 12, 31),
+                    lastDay: DateTime.utc(2099, 12, 31),
                     focusedDay: focusedDay,
                     selectedDayPredicate: (day) => isSameDay(selectedDay, day),
 

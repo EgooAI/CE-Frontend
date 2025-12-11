@@ -73,105 +73,113 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         ],
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const CircleAvatar(radius: 50, child: Icon(Icons.person, size: 50)),
-            const SizedBox(height: 24),
-            Text(
-              user.username,
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 24),
-            ListTile(
-              leading: const Icon(Icons.email),
-              title: const Text('邮箱'),
-              subtitle: Text(user.email),
-              trailing: IconButton(
-                icon: const Icon(Icons.edit),
-                onPressed: _navigateToEditEmail,
-                tooltip: '修改邮箱',
+      body: SingleChildScrollView(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircleAvatar(
+                radius: 50,
+                child: Icon(Icons.person, size: 50),
               ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.person),
-              title: const Text('用户名'),
-              subtitle: Text(user.username),
-              trailing: IconButton(
-                icon: const Icon(Icons.edit),
-                onPressed: _navigateToEditUsername,
-                tooltip: '修改用户名',
+              const SizedBox(height: 24),
+              Text(
+                user.username,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.lock),
-              title: const Text('密码'),
-              subtitle: const Text('••••••'),
-              trailing: IconButton(
-                icon: const Icon(Icons.edit),
-                onPressed: _navigateToEditPassword,
-                tooltip: '修改密码',
+              const SizedBox(height: 24),
+              ListTile(
+                leading: const Icon(Icons.email),
+                title: const Text('邮箱'),
+                subtitle: Text(user.email),
+                trailing: IconButton(
+                  icon: const Icon(Icons.edit),
+                  onPressed: _navigateToEditEmail,
+                  tooltip: '修改邮箱',
+                ),
               ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.access_time),
-              title: const Text('注册时间'),
-              subtitle: Text(
-                user.createdAt != null
-                    ? '${user.createdAt!.year}-${user.createdAt!.month.toString().padLeft(2, '0')}-${user.createdAt!.day.toString().padLeft(2, '0')}'
-                    : "未知",
+              ListTile(
+                leading: const Icon(Icons.person),
+                title: const Text('用户名'),
+                subtitle: Text(user.username),
+                trailing: IconButton(
+                  icon: const Icon(Icons.edit),
+                  onPressed: _navigateToEditUsername,
+                  tooltip: '修改用户名',
+                ),
               ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.notifications_active),
-              title: const Text('我的提醒'),
-              subtitle: const Text('查看所有日程提醒'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Navigator.pushNamed(context, '/reminders');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.repeat),
-              title: const Text('我的重复事件'),
-              subtitle: const Text('查看所有重复日程模板'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Navigator.pushNamed(context, '/recurring-schedules');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.calendar_today),
-              title: const Text('日常事项在日历中显示'),
-              trailing: Switch(
-                value: user.config.dailyScheduleDisplayInCalendar,
-                onChanged: (value) async {
-                  final oldConfig = user.config;
-                  setState(() {
-                    user = user.copyWith(
-                      config: user.config.copyWith(
-                        dailyScheduleDisplayInCalendar: value,
-                      ),
-                    );
-                  });
-                  try {
-                    await AuthService().updateUserConfig(user.config);
-                  } catch (e) {
-                    if (!context.mounted) return;
-
-                    setState(() {
-                      user = user.copyWith(config: oldConfig);
-                    });
-
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(SnackBar(content: Text('更新设置失败: $e')));
-                  }
+              ListTile(
+                leading: const Icon(Icons.lock),
+                title: const Text('密码'),
+                subtitle: const Text('••••••'),
+                trailing: IconButton(
+                  icon: const Icon(Icons.edit),
+                  onPressed: _navigateToEditPassword,
+                  tooltip: '修改密码',
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.access_time),
+                title: const Text('注册时间'),
+                subtitle: Text(
+                  user.createdAt != null
+                      ? '${user.createdAt!.year}-${user.createdAt!.month.toString().padLeft(2, '0')}-${user.createdAt!.day.toString().padLeft(2, '0')}'
+                      : "未知",
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.notifications_active),
+                title: const Text('我的提醒'),
+                subtitle: const Text('查看所有日程提醒'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.pushNamed(context, '/reminders');
                 },
               ),
-            ),
-          ],
+              ListTile(
+                leading: const Icon(Icons.repeat),
+                title: const Text('我的重复事件'),
+                subtitle: const Text('查看所有重复日程模板'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.pushNamed(context, '/recurring-schedules');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.calendar_today),
+                title: const Text('日常事项在日历中显示'),
+                trailing: Switch(
+                  value: user.config.dailyScheduleDisplayInCalendar,
+                  onChanged: (value) async {
+                    final oldConfig = user.config;
+                    setState(() {
+                      user = user.copyWith(
+                        config: user.config.copyWith(
+                          dailyScheduleDisplayInCalendar: value,
+                        ),
+                      );
+                    });
+                    try {
+                      await AuthService().updateUserConfig(user.config);
+                    } catch (e) {
+                      if (!context.mounted) return;
+
+                      setState(() {
+                        user = user.copyWith(config: oldConfig);
+                      });
+
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(SnackBar(content: Text('更新设置失败: $e')));
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

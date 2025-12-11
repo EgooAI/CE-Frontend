@@ -1,4 +1,6 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
+import 'auth_service.dart';
 
 /// API 统一响应格式
 class ApiResponse<T> {
@@ -48,8 +50,12 @@ class ApiClient {
 
   static bool _interceptorAdded = false;
 
+  // 全局 Navigator Key，用于 401 跳转登录页
+  static GlobalKey<NavigatorState>? navigatorKey;
+
   static Dio get instance {
     if (!_interceptorAdded) {
+      // 响应拦截器：处理统一响应格式
       _dio.interceptors.add(
         InterceptorsWrapper(
           onResponse: (response, handler) {
@@ -86,7 +92,43 @@ class ApiClient {
 
             handler.next(response);
           },
-          onError: (error, handler) {
+          onError: (error, handler) async {
+            // 401 拦截：自动刷新 token 或跳转登录
+            if (error.response?.statusCode == 401) {
+              print('ApiClient: 检测到 401，尝试刷新 token...');
+
+              // 避免刷新接口本身触发无限循环
+              if (error.requestOptions.path.contains('/auth/refresh') ||
+                  error.requestOptions.path.contains('/login') ||
+                  error.requestOptions.path.contains('/register')) {
+                print('ApiClient: 认证接口返回 401，跳过刷新');
+                _handleUnauthorized(error);
+                handler.next(error);
+                return;
+              }
+
+              // 尝试刷新 token
+              try {
+                final authService = AuthService();
+                final newToken = await authService.refreshAccessToken();
+
+                // 更新请求头
+                error.requestOptions.headers['Authorization'] =
+                    'Bearer $newToken';
+
+                // 重试原请求
+                print('ApiClient: Token 刷新成功，重试请求...');
+                final response = await _dio.fetch(error.requestOptions);
+                handler.resolve(response);
+                return;
+              } catch (e) {
+                print('ApiClient: Token 刷新失败 - $e');
+                _handleUnauthorized(error);
+                handler.next(error);
+                return;
+              }
+            }
+
             // 处理错误响应中的统一格式
             if (error.response?.data is Map<String, dynamic>) {
               final data = error.response!.data as Map<String, dynamic>;
@@ -107,6 +149,27 @@ class ApiClient {
       _interceptorAdded = true;
     }
     return _dio;
+  }
+
+  /// 处理未授权错误：清空状态并跳转登录页
+  static void _handleUnauthorized(DioException error) async {
+    print('ApiClient: 处理 401 未授权，清空认证状态...');
+
+    // 清空本地认证状态
+    try {
+      final authService = AuthService();
+      await authService.logout();
+    } catch (e) {
+      print('ApiClient: 清空认证状态失败 - $e');
+    }
+
+    // 跳转登录页（使用全局 Navigator）
+    if (navigatorKey?.currentState != null) {
+      navigatorKey!.currentState!.pushNamedAndRemoveUntil(
+        '/login',
+        (route) => false,
+      );
+    }
   }
 
   static void setToken(String token) {

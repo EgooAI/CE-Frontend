@@ -24,22 +24,34 @@ class Conversation {
   });
 
   factory Conversation.fromJson(Map<String, dynamic> json) {
-    return Conversation(
-      id: json['id'],
-      title: json['title'],
-      summary: json['summary'],
-      isActive: json['isActive'] ?? true,
-      isPinned: json['isPinned'] ?? false,
-      messageCount: json['messageCount'] ?? 0,
-      lastMessageAt: json['lastMessageAt'] != null
-          ? DateTime.parse(json['lastMessageAt'])
-          : null,
-      createdAt: DateTime.parse(json['createdAt']),
-      updatedAt: DateTime.parse(json['updatedAt']),
-      messages: json['messages'] != null
-          ? (json['messages'] as List).map((e) => Message.fromJson(e)).toList()
-          : null,
-    );
+    try {
+      return Conversation(
+        id: json['id'] ?? '',
+        title: json['title'] ?? '未命名对话',
+        summary: json['summary'],
+        isActive: json['isActive'] ?? true,
+        isPinned: json['isPinned'] ?? false,
+        messageCount: json['messageCount'] ?? 0,
+        lastMessageAt: json['lastMessageAt'] != null
+            ? DateTime.parse(json['lastMessageAt'])
+            : null,
+        createdAt: json['createdAt'] != null
+            ? DateTime.parse(json['createdAt'])
+            : DateTime.now(),
+        updatedAt: json['updatedAt'] != null
+            ? DateTime.parse(json['updatedAt'])
+            : DateTime.now(),
+        messages: json['messages'] != null
+            ? (json['messages'] as List)
+                  .map((e) => Message.fromJson(e as Map<String, dynamic>))
+                  .toList()
+            : null,
+      );
+    } catch (e) {
+      print('解析 Conversation 失败: $e');
+      print('原始数据: $json');
+      rethrow;
+    }
   }
 }
 
@@ -63,14 +75,22 @@ class Message {
   });
 
   factory Message.fromJson(Map<String, dynamic> json) {
-    return Message(
-      id: json['id'],
-      role: json['role'],
-      content: json['content'],
-      attachments: json['attachments'],
-      metadata: json['metadata'],
-      conversationId: json['conversationId'],
-      createdAt: DateTime.parse(json['createdAt']),
-    );
+    try {
+      return Message(
+        id: json['id'] ?? '',
+        role: json['role'] ?? 'user',
+        content: json['content'] ?? '',
+        attachments: json['attachments'],
+        metadata: json['metadata'],
+        conversationId: json['conversationId'] ?? json['conversation_id'] ?? '',
+        createdAt: json['createdAt'] != null
+            ? DateTime.parse(json['createdAt'])
+            : DateTime.now(),
+      );
+    } catch (e) {
+      print('解析 Message 失败: $e');
+      print('原始数据: $json');
+      rethrow;
+    }
   }
 }

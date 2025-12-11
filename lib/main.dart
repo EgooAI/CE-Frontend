@@ -9,10 +9,17 @@ import 'pages/edit_password_page.dart';
 import 'pages/reminders_page.dart'; // ignore: unused_import
 import 'pages/recurring_schedules_page.dart';
 import 'services/auth_service.dart';
+import 'services/api_client.dart';
 import 'models/user.dart';
+
+// 全局 Navigator Key，用于 401 拦截跳转
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 设置全局 Navigator Key 到 ApiClient
+  ApiClient.navigatorKey = navigatorKey;
 
   // 强制竖屏（仅在移动平台）
   try {
@@ -106,6 +113,7 @@ class _MyAppState extends State<MyApp> {
 
     return MaterialApp(
       title: 'CE Frontend',
+      navigatorKey: navigatorKey, // 设置全局 Navigator Key
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.deepPurple,
