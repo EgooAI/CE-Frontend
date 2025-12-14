@@ -178,6 +178,34 @@ class _ProfilePageState extends State<ProfilePage> {
                   },
                 ),
               ),
+              ListTile(
+                leading: const Icon(Icons.schedule),
+                title: const Text('使用24小时制'),
+                trailing: Switch(
+                  value: user.config.use24HourFormat,
+                  onChanged: (value) async {
+                    final oldConfig = user.config;
+                    setState(() {
+                      user = user.copyWith(
+                        config: user.config.copyWith(use24HourFormat: value),
+                      );
+                    });
+                    try {
+                      await AuthService().updateUserConfig(user.config);
+                    } catch (e) {
+                      if (!context.mounted) return;
+
+                      setState(() {
+                        user = user.copyWith(config: oldConfig);
+                      });
+
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(SnackBar(content: Text('更新设置失败: $e')));
+                    }
+                  },
+                ),
+              ),
             ],
           ),
         ),

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 import '../models/schedule.dart';
 import '../models/recurrence_rule.dart';
 
@@ -11,6 +12,7 @@ class ScheduleCard extends StatefulWidget {
   final Function(String newStatus)? onStatusChanged; // 状态变更回调
   final VoidCallback? onEdit; // 编辑回调
   final VoidCallback? onDelete; // 删除回调
+  final bool use24HourFormat;
 
   const ScheduleCard({
     super.key,
@@ -20,6 +22,7 @@ class ScheduleCard extends StatefulWidget {
     this.onStatusChanged,
     this.onEdit,
     this.onDelete,
+    this.use24HourFormat = true,
   });
 
   @override
@@ -187,8 +190,10 @@ class _ScheduleCardState extends State<ScheduleCard> {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    final card = Card(
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(0)),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: widget.onTap,
         child: Padding(
@@ -223,7 +228,10 @@ class _ScheduleCardState extends State<ScheduleCard> {
               // 时间
               const SizedBox(height: 4),
               Text(
-                widget.schedule.getTimeDisplay(),
+                widget.schedule.getTimeDisplay(
+                  use24HourFormat: widget.use24HourFormat,
+                  useChinesePeriod: true,
+                ),
                 style: TextStyle(fontSize: 14, color: Colors.grey[700]),
               ),
 
@@ -276,6 +284,62 @@ class _ScheduleCardState extends State<ScheduleCard> {
           ),
         ),
       ),
+    );
+
+    final slidableCard = widget.onDelete != null
+        ? Slidable(
+            key: ValueKey(widget.schedule.id),
+            endActionPane: ActionPane(
+              motion: const DrawerMotion(),
+              extentRatio: 0.20,
+              children: [
+                CustomSlidableAction(
+                  onPressed: (_) => widget.onDelete?.call(),
+                  padding: EdgeInsets.zero,
+                  autoClose: true,
+                  child: SizedBox.expand(
+                    child: Container(
+                      color: Colors.red,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: const [
+                          Icon(Icons.delete, color: Colors.white, size: 20),
+                          SizedBox(width: 6),
+                          Text(
+                            '删除',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            child: card,
+          )
+        : card;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 6,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: slidableCard,
     );
   }
 
@@ -331,6 +395,10 @@ class _ScheduleCardState extends State<ScheduleCard> {
       case 'cancelled':
         backgroundColor = Colors.red[50] ?? Colors.red.shade50;
         textColor = Colors.red[700] ?? Colors.red.shade700;
+        break;
+      case 'failed':
+        backgroundColor = Colors.orange[50] ?? Colors.orange.shade50;
+        textColor = Colors.orange[700] ?? Colors.orange.shade700;
         break;
       default:
         backgroundColor = Colors.grey[200] ?? Colors.grey.shade200;
@@ -632,9 +700,17 @@ class _ScheduleCardState extends State<ScheduleCard> {
     }
   }
 
-  // 格式化日期
+  // 格式化日期（用于提醒时间显示）
   String _formatDate(DateTime date) {
-    return '${date.month}/${date.day} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    final dateStr = '${date.month}/${date.day}';
+    final hh = date.hour.toString().padLeft(2, '0');
+    final mm = date.minute.toString().padLeft(2, '0');
+    if (widget.use24HourFormat) {
+      return '$dateStr $hh:$mm';
+    }
+    final hour12 = date.hour % 12 == 0 ? 12 : date.hour % 12;
+    final period = date.hour < 12 ? '上午' : '下午';
+    return '$dateStr $period ${hour12.toString().padLeft(2, '0')}:$mm';
   }
 
   // 构建重复标识徽章

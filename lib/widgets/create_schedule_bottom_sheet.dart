@@ -22,6 +22,7 @@ class CreateScheduleBottomSheet extends StatefulWidget {
   final Schedule? existingSchedule; // 编辑模式
   final Map<String, dynamic>? initialData; // AI 预填充数据
   final Function(Schedule) onSave;
+  final bool use24HourFormat;
 
   const CreateScheduleBottomSheet({
     super.key,
@@ -29,6 +30,7 @@ class CreateScheduleBottomSheet extends StatefulWidget {
     this.existingSchedule,
     this.initialData,
     required this.onSave,
+    this.use24HourFormat = true,
   });
 
   @override
@@ -76,7 +78,10 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
       _isAllDay = schedule.allDay;
       _status = schedule.status;
       _priority = schedule.priority ?? 'medium';
-      _type = schedule.type ?? 'task';
+      // 普通日程不再使用 daily 类型，若后端已有 daily 则回退为 task
+      _type = (schedule.type == 'daily' || schedule.type == null)
+          ? 'task'
+          : schedule.type;
       _remindBefore =
           schedule.remindBefore ??
           _computeRemindBeforeFromReminders(
@@ -122,7 +127,10 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
       _isAllDay = data['allDay'] ?? false;
       _status = data['status'] ?? 'pending';
       _priority = data['priority'] ?? 'medium';
-      _type = data['type'] ?? 'task';
+      final incomingType = data['type'] as String?;
+      _type = (incomingType == null || incomingType == 'daily')
+          ? 'task'
+          : incomingType;
       _remindBefore = data['remindBefore'];
       if (_remindBefore == null && data['reminders'] is List) {
         final computed = _computeRemindBeforeFromReminders(
@@ -226,6 +234,19 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
     super.dispose();
   }
 
+  String _formatDateTime(DateTime dt) {
+    final dateStr =
+        '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+    final hh = dt.hour.toString().padLeft(2, '0');
+    final mm = dt.minute.toString().padLeft(2, '0');
+    if (widget.use24HourFormat) {
+      return '$dateStr $hh:$mm';
+    }
+    final hour12 = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final period = dt.hour < 12 ? '上午' : '下午';
+    return '$dateStr $period ${hour12.toString().padLeft(2, '0')}:$mm';
+  }
+
   bool get _canSave {
     return _titleController.text.isNotEmpty && _startTime != null;
   }
@@ -252,7 +273,18 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
           ? TimeOfDay(hour: currentTime.hour, minute: currentTime.minute)
           : TimeOfDay(hour: isStart ? 9 : 10, minute: 0);
 
-      time = await showTimePicker(context: context, initialTime: initialTime);
+      time = await showTimePicker(
+        context: context,
+        initialTime: initialTime,
+        builder: (context, child) {
+          return MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(alwaysUse24HourFormat: widget.use24HourFormat),
+            child: child ?? const SizedBox.shrink(),
+          );
+        },
+      );
 
       if (time == null) return;
     }
@@ -541,9 +573,7 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
               prefixIcon: Icon(Icons.event),
             ),
             child: Text(
-              _startTime != null
-                  ? '${_startTime!.year}-${_startTime!.month.toString().padLeft(2, '0')}-${_startTime!.day.toString().padLeft(2, '0')} ${_startTime!.hour.toString().padLeft(2, '0')}:${_startTime!.minute.toString().padLeft(2, '0')}'
-                  : '请选择开始时间',
+              _startTime != null ? _formatDateTime(_startTime!) : '请选择开始时间',
               style: TextStyle(
                 color: _startTime != null ? Colors.black87 : Colors.grey,
               ),
@@ -569,9 +599,7 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
                   : null,
             ),
             child: Text(
-              _endTime != null
-                  ? '${_endTime!.year}-${_endTime!.month.toString().padLeft(2, '0')}-${_endTime!.day.toString().padLeft(2, '0')} ${_endTime!.hour.toString().padLeft(2, '0')}:${_endTime!.minute.toString().padLeft(2, '0')}'
-                  : '选择结束时间',
+              _endTime != null ? _formatDateTime(_endTime!) : '选择结束时间',
               style: TextStyle(
                 color: _endTime != null ? Colors.black87 : Colors.grey,
               ),
@@ -642,6 +670,11 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
               label: const Text('已取消'),
               selected: _status == 'cancelled',
               onSelected: (_) => setState(() => _status = 'cancelled'),
+            ),
+            ChoiceChip(
+              label: const Text('未完成'),
+              selected: _status == 'failed',
+              onSelected: (_) => setState(() => _status = 'failed'),
             ),
           ],
         ),
@@ -729,18 +762,6 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
               ),
               selected: _type == 'event',
               onSelected: (_) => setState(() => _type = 'event'),
-            ),
-            ChoiceChip(
-              label: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.calendar_today, size: 16),
-                  SizedBox(width: 4),
-                  Text('日常'),
-                ],
-              ),
-              selected: _type == 'daily',
-              onSelected: (_) => setState(() => _type = 'daily'),
             ),
           ],
         ),
@@ -953,6 +974,7 @@ class AnimatedBottomSheetContent extends StatelessWidget {
   final Schedule? existingSchedule;
   final Map<String, dynamic>? initialData;
   final Function(Schedule) onSave;
+  final bool use24HourFormat;
 
   const AnimatedBottomSheetContent({
     super.key,
@@ -960,6 +982,7 @@ class AnimatedBottomSheetContent extends StatelessWidget {
     this.existingSchedule,
     this.initialData,
     required this.onSave,
+    this.use24HourFormat = true,
   });
 
   @override
@@ -969,6 +992,7 @@ class AnimatedBottomSheetContent extends StatelessWidget {
       existingSchedule: existingSchedule,
       initialData: initialData,
       onSave: onSave,
+      use24HourFormat: use24HourFormat,
     );
   }
 }
@@ -986,6 +1010,7 @@ void showCreateScheduleBottomSheet(
   Schedule? existingSchedule,
   Map<String, dynamic>? initialData,
   required Function(Schedule) onSave,
+  bool use24HourFormat = true,
 }) {
   showModalBottomSheet(
     context: context,
@@ -1014,6 +1039,7 @@ void showCreateScheduleBottomSheet(
         existingSchedule: existingSchedule,
         initialData: initialData,
         onSave: onSave,
+        use24HourFormat: use24HourFormat,
       ),
     ),
   );

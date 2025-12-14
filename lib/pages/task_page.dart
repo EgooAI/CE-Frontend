@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/schedule.dart';
 import '../services/schedule_service.dart';
+import '../services/auth_service.dart';
 import '../widgets/schedule_card.dart';
 import '../widgets/create_schedule_bottom_sheet.dart';
 
@@ -19,6 +20,7 @@ class _TaskPageState extends State<TaskPage>
   late TabController _tabController;
   List<Schedule> _allTasks = [];
   final Set<String> _expandedTaskIds = {};
+  bool _use24HourFormat = true;
 
   // 批量选择模式
   bool _isSelectionMode = false;
@@ -43,6 +45,7 @@ class _TaskPageState extends State<TaskPage>
     TaskTab(label: '待进行', status: 'pending', icon: Icons.pending_actions),
     TaskTab(label: '进行中', status: 'in_progress', icon: Icons.play_circle),
     TaskTab(label: '已完成', status: 'completed', icon: Icons.check_circle),
+    TaskTab(label: '未完成', status: 'failed', icon: Icons.warning_amber_rounded),
     TaskTab(label: '已取消', status: 'cancelled', icon: Icons.cancel),
   ];
 
@@ -51,12 +54,14 @@ class _TaskPageState extends State<TaskPage>
     super.initState();
     _tabController = TabController(length: _tabs.length, vsync: this);
     _loadTasks();
+    _loadConfig();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _loadTasks();
+    _loadConfig();
   }
 
   @override
@@ -68,6 +73,19 @@ class _TaskPageState extends State<TaskPage>
   // 公开的刷新方法，供外部调用
   void refreshData() {
     _loadTasks();
+    _loadConfig();
+  }
+
+  Future<void> _loadConfig() async {
+    try {
+      final profile = await AuthService().getProfile();
+      if (!mounted) return;
+      setState(() {
+        _use24HourFormat = profile.config.use24HourFormat;
+      });
+    } catch (_) {
+      // 忽略配置加载失败
+    }
   }
 
   // 加载任务数据
@@ -134,6 +152,7 @@ class _TaskPageState extends State<TaskPage>
       context,
       initialDate: DateTime.now(),
       onSave: _handleCreate,
+      use24HourFormat: _use24HourFormat,
     );
   }
 
@@ -143,6 +162,7 @@ class _TaskPageState extends State<TaskPage>
       context,
       existingSchedule: task,
       onSave: (updatedTask) => _handleUpdate(task.id, updatedTask),
+      use24HourFormat: _use24HourFormat,
     );
   }
 
@@ -826,6 +846,7 @@ class _TaskPageState extends State<TaskPage>
                   _handleStatusChange(task, newStatus),
               onEdit: () => _showEditDialog(task),
               onDelete: () => _showDeleteConfirmDialog(task),
+              use24HourFormat: _use24HourFormat,
             ),
           );
         }

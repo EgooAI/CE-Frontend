@@ -9,7 +9,7 @@ class Schedule {
   final DateTime? endTime; // 结束时间可选
   final bool allDay;
   final String? location;
-  final String status; // pending/in_progress/completed/cancelled
+  final String status; // pending/in_progress/completed/cancelled/failed
   final String? type; // meeting/task/event
   final String? priority; // high/medium/low
   final String? recurrence;
@@ -154,18 +154,31 @@ class Schedule {
   }
 
   // 格式化时间显示
-  String getTimeDisplay() {
+  String getTimeDisplay({
+    bool use24HourFormat = true,
+    bool useChinesePeriod = true,
+  }) {
+    String formatTime(DateTime dt) {
+      final hh = dt.hour.toString().padLeft(2, '0');
+      final mm = dt.minute.toString().padLeft(2, '0');
+      if (use24HourFormat) return '$hh:$mm';
+
+      final hour12 = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+      final period = dt.hour < 12
+          ? (useChinesePeriod ? '上午 ' : 'AM ')
+          : (useChinesePeriod ? '下午 ' : 'PM ');
+      return '$period${hour12.toString().padLeft(2, '0')}:$mm';
+    }
+
     if (allDay) {
       return '全天';
     }
-    final startStr =
-        '${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}';
+    final startStr = formatTime(startTime);
     if (endTime == null) {
       return startStr;
     }
-    final endStr =
-        '${endTime!.hour.toString().padLeft(2, '0')}:${endTime!.minute.toString().padLeft(2, '0')}';
-    return '$startStr-$endStr';
+    final endStr = formatTime(endTime!);
+    return '$startStr - $endStr';
   }
 
   // 获取状态显示文本
@@ -179,6 +192,8 @@ class Schedule {
         return '已完成';
       case 'cancelled':
         return '已取消';
+      case 'failed':
+        return '未完成';
       default:
         return '未知';
     }

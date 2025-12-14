@@ -1,8 +1,10 @@
-import 'package:ce_frontend/services/auth_service.dart';
+﻿import 'package:ce_frontend/services/auth_service.dart';
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import '../models/schedule.dart';
+
 import '../services/schedule_service.dart';
+import '../services/daily_task_service.dart';
 import '../widgets/schedule_card.dart';
 import '../widgets/create_schedule_bottom_sheet.dart';
 import 'package:flutter/rendering.dart';
@@ -18,33 +20,49 @@ class CalendarPage extends StatefulWidget {
 
 class _CalendarPageState extends State<CalendarPage> {
   final _scheduleService = ScheduleService();
+  final _dailyTaskService = DailyTaskService();
 
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
+  bool _use24HourFormat = true;
 
   Map<DateTime, List<Schedule>> _scheduleMap = {};
   final Set<String> _expandedScheduleIds = {};
 
   bool _isLoading = true;
-  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
     _selectedDay = _focusedDay;
     _loadSchedules();
+    _loadConfig();
+  }
+
+  Future<void> _loadConfig() async {
+    try {
+      final profile = await AuthService().getProfile();
+      if (!mounted) return;
+      setState(() {
+        _use24HourFormat = profile.config.use24HourFormat;
+      });
+    } catch (_) {
+      // 忽略配置加载失败
+    }
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // 每次页面显示时重新加载日程
+    // 每次页面显示时重新加载日程和配置
     _loadSchedules();
+    _loadConfig();
   }
 
   // 公开的刷新方法，供外部调用
   void refreshData() {
     _loadSchedules();
+    _loadConfig();
   }
 
   // 公开的方法：跳转到指定日期
@@ -59,32 +77,29 @@ class _CalendarPageState extends State<CalendarPage> {
   Future<void> _loadSchedules() async {
     setState(() {
       _isLoading = true;
-      _errorMessage = null;
     });
 
     try {
       List<Schedule> schedules = [];
       final initialSchedules = await _scheduleService.getSchedules();
       final currentUser = await AuthService().getProfile();
-      if (currentUser != null &&
-          currentUser.config.dailyScheduleDisplayInCalendar == false) {
-        // 检查配置：如果“不显示日常”，则把 isDaily 为 true 的过滤掉
-        schedules = initialSchedules.where((s) {
-          // TODO: 这里需要你根据实际 Schedule 结构修改判断条件
-          // 例如：return s.type != 'daily';
-          // 或者：return !s.isRoutine;
-          return s.isDaily == false;
-        }).toList();
-      } else {
-        schedules = initialSchedules;
+      schedules = initialSchedules.where((s) => s.type != 'daily').toList();
+
+      // 如果启用在日历显示日常任务，加载日常数据
+      if (currentUser.config.dailyScheduleDisplayInCalendar == true) {
+        try {
+          await _dailyTaskService.getDailyTasks(status: 'active');
+        } catch (e) {
+          debugPrint('加载日常任务失败: $e');
+        }
       }
+
       setState(() {
         _scheduleMap = _buildScheduleMap(schedules);
         _isLoading = false;
       });
     } catch (e) {
       setState(() {
-        _errorMessage = e.toString().replaceAll('Exception: ', '');
         _isLoading = false;
       });
     }
@@ -267,6 +282,7 @@ class _CalendarPageState extends State<CalendarPage> {
       context,
       initialDate: _selectedDay ?? DateTime.now(),
       onSave: _handleCreate,
+      use24HourFormat: _use24HourFormat,
     );
   }
 
@@ -276,6 +292,7 @@ class _CalendarPageState extends State<CalendarPage> {
       context,
       existingSchedule: schedule,
       onSave: (updatedSchedule) => _handleUpdate(schedule.id, updatedSchedule),
+      use24HourFormat: _use24HourFormat,
     );
   }
 
@@ -754,6 +771,7 @@ class _CalendarPageState extends State<CalendarPage> {
                   _handleStatusChange(schedule, newStatus),
               onEdit: () => _showEditDialog(schedule),
               onDelete: () => _showDeleteConfirmDialog(schedule),
+              use24HourFormat: _use24HourFormat,
             ),
           );
         }),
@@ -785,28 +803,6 @@ class _CalendarPageState extends State<CalendarPage> {
   }
 
   // 错误视图
-  Widget _buildErrorView() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.error_outline, size: 64, color: Colors.red),
-          const SizedBox(height: 16),
-          Text(
-            _errorMessage ?? '加载失败',
-            style: const TextStyle(fontSize: 16, color: Colors.red),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: _loadSchedules,
-            icon: const Icon(Icons.refresh),
-            label: const Text('重试'),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _CalendarHeaderDelegate extends SliverPersistentHeaderDelegate {

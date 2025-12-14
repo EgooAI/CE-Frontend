@@ -3,6 +3,7 @@ import '../models/user.dart';
 import 'chat_page.dart';
 import 'calendar_page.dart';
 import 'task_page.dart';
+import 'daily_page.dart';
 import 'profile_page.dart';
 
 class MainPage extends StatefulWidget {
@@ -20,18 +21,19 @@ class _MainPageState extends State<MainPage> {
     GlobalKey<State>(), // ChatPage
     GlobalKey<State>(), // CalendarPage
     GlobalKey<State>(), // TaskPage
+    GlobalKey<State>(), // DailyPage
     GlobalKey<State>(), // ProfilePage
   ];
 
   // 公共方法：切换到指定页面
   void switchToPage(int index) {
-    if (index >= 0 && index < 4) {
+    if (index >= 0 && index < 5) {
       setState(() {
         _currentIndex = index;
       });
 
       // 触发对应页面的数据刷新
-      if (index == 1 || index == 2) {
+      if (index == 1 || index == 2 || index == 3) {
         final pageState = _pageKeys[index].currentState;
         if (pageState != null && pageState.mounted) {
           (pageState as dynamic).refreshData?.call();
@@ -68,7 +70,8 @@ class _MainPageState extends State<MainPage> {
           ChatPage(key: _pageKeys[0]),
           CalendarPage(key: _pageKeys[1]),
           TaskPage(key: _pageKeys[2]),
-          ProfilePage(key: _pageKeys[3], initialUser: widget.user),
+          DailyPage(key: _pageKeys[3]),
+          ProfilePage(key: _pageKeys[4], initialUser: widget.user),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
@@ -78,12 +81,11 @@ class _MainPageState extends State<MainPage> {
             _currentIndex = index;
           });
 
-          // 切换到日历或任务页面时，触发数据刷新
+          // 切换到日历、任务或日常页面时，触发数据刷新
           if (index == 1) {
             // 日历页面
             final calendarState = _pageKeys[1].currentState;
             if (calendarState != null && calendarState.mounted) {
-              // 使用反射或接口调用刷新方法
               (calendarState as dynamic).refreshData?.call();
             }
           } else if (index == 2) {
@@ -91,6 +93,12 @@ class _MainPageState extends State<MainPage> {
             final taskState = _pageKeys[2].currentState;
             if (taskState != null && taskState.mounted) {
               (taskState as dynamic).refreshData?.call();
+            }
+          } else if (index == 3) {
+            // 日常页面
+            final dailyState = _pageKeys[3].currentState;
+            if (dailyState != null && dailyState.mounted) {
+              (dailyState as dynamic).refreshData?.call();
             }
           }
         },
@@ -103,6 +111,7 @@ class _MainPageState extends State<MainPage> {
             label: '日历',
           ),
           BottomNavigationBarItem(icon: Icon(Icons.task), label: '任务'),
+          BottomNavigationBarItem(icon: Icon(Icons.today), label: '日常'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: '我的'),
         ],
       ),
