@@ -1,28 +1,55 @@
 import 'dart:convert';
+import 'package:hive/hive.dart';
 
+part 'schedule.g.dart';
+
+@HiveType(typeId: 0)
 class Schedule {
+  @HiveField(0)
   final String id;
+  @HiveField(1)
   final String userId;
+  @HiveField(2)
   final String title;
+  @HiveField(3)
   final String? description;
+  @HiveField(4)
   final DateTime startTime;
+  @HiveField(5)
   final DateTime? endTime; // 结束时间可选
+  @HiveField(6)
   final bool allDay;
+  @HiveField(7)
   final String? location;
+  @HiveField(8)
   final String status; // pending/in_progress/completed/cancelled/failed
+  @HiveField(9)
   final String? type; // meeting/task/event
+  @HiveField(10)
   final String? priority; // high/medium/low
+  @HiveField(11)
   final String? recurrence;
+  @HiveField(12)
   final String? participants; // JSON string
+  @HiveField(13)
   final String? notes;
+  @HiveField(14)
   final String? attachments; // JSON string
+  @HiveField(15)
   final String? daomengId;
+  @HiveField(16)
   final int? remindBefore; // 提前提醒分钟数
+  @HiveField(17)
   final List<dynamic>? reminders; // 提醒列表
+  @HiveField(18)
   final String? parentId; // 重复日程模板 ID
+  @HiveField(19)
   final int? iterationIndex; // 第几次实例（从 1 开始）
+  @HiveField(20)
   final DateTime? createdAt;
+  @HiveField(21)
   final DateTime? updatedAt;
+  @HiveField(22)
   final bool isDaily;
 
   Schedule({

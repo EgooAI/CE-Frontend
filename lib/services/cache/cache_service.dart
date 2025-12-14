@@ -55,10 +55,10 @@ abstract class CacheService {
   /// 检查缓存是否已过期
   ///
   /// [key] 缓存键
-  /// [maxAge] 最大有效期
   ///
   /// 返回：true 表示已过期或不存在，false 表示仍有效
-  Future<bool> isExpired(String key, Duration maxAge);
+  /// 实现自动从 CacheKeys 查找过期时间
+  Future<bool> isExpired(String key);
 
   /// 获取缓存的时间戳
   ///
@@ -66,13 +66,12 @@ abstract class CacheService {
   /// 返回：缓存时间，如果不存在则返回 null
   Future<DateTime?> getTimestamp(String key);
 
-  /// 设置缓存时间戳
+  /// 设置缓存时间戳（自动使用当前时间）
   ///
   /// [key] 缓存键
-  /// [timestamp] 时间戳
   ///
   /// 通常由 set/setList 自动调用，不需要手动调用
-  Future<void> setTimestamp(String key, DateTime timestamp);
+  Future<void> setTimestamp(String key);
 
   /// 获取缓存大小（条目数量）
   ///
@@ -86,7 +85,7 @@ abstract class CacheService {
 
   /// 清理过期缓存
   ///
-  /// [maxAge] 超过此时间的缓存将被删除
+  /// 根据 CacheKeys 定义的过期时间，删除所有过期缓存
   /// 返回：清理的条目数量
-  Future<int> cleanExpiredCache(Duration maxAge);
+  Future<int> cleanExpiredCache();
 }

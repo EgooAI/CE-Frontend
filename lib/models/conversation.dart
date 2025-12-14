@@ -1,13 +1,28 @@
+import 'package:hive/hive.dart';
+
+part 'conversation.g.dart';
+
+@HiveType(typeId: 4)
 class Conversation {
+  @HiveField(0)
   final String id;
+  @HiveField(1)
   final String title;
+  @HiveField(2)
   final String? summary;
+  @HiveField(3)
   final bool isActive;
+  @HiveField(4)
   final bool isPinned;
+  @HiveField(5)
   final int messageCount;
+  @HiveField(6)
   final DateTime? lastMessageAt;
+  @HiveField(7)
   final DateTime createdAt;
+  @HiveField(8)
   final DateTime updatedAt;
+  @HiveField(9)
   final List<Message>? messages;
 
   Conversation({
@@ -55,13 +70,21 @@ class Conversation {
   }
 }
 
+@HiveType(typeId: 7)
 class Message {
+  @HiveField(0)
   final String id;
+  @HiveField(1)
   final String role;
+  @HiveField(2)
   final String content;
+  @HiveField(3)
   final String? attachments;
+  @HiveField(4)
   final String? metadata;
+  @HiveField(5)
   final String conversationId;
+  @HiveField(6)
   final DateTime createdAt;
 
   Message({

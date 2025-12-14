@@ -11,6 +11,7 @@ import 'pages/recurring_schedules_page.dart';
 import 'services/auth_service.dart';
 import 'services/api_client.dart';
 import 'models/user.dart';
+import 'utils/service_locator.dart';
 
 // 全局 Navigator Key，用于 401 拦截跳转
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -20,6 +21,9 @@ final GlobalKey mainPageKey = GlobalKey();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 初始化服务定位器（Hive + 依赖注入）
+  await setupServiceLocator();
 
   // 设置全局 Navigator Key 到 ApiClient
   ApiClient.navigatorKey = navigatorKey;

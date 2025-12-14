@@ -1,12 +1,23 @@
 import 'package:ce_frontend/models/user_config.dart';
+import 'package:hive/hive.dart';
 
+part 'user.g.dart';
+
+@HiveType(typeId: 2)
 class User {
+  @HiveField(0)
   final String id;
+  @HiveField(1)
   final String email;
+  @HiveField(2)
   final String username;
+  @HiveField(3)
   final DateTime? createdAt;
+  @HiveField(4)
   final DateTime? updatedAt;
+  @HiveField(5)
   final String? notificationEmail;
+  @HiveField(6)
   final UserConfig config;
 
   User({

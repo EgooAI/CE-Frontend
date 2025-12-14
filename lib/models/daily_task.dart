@@ -1,14 +1,29 @@
+import 'package:hive/hive.dart';
+
+part 'daily_task.g.dart';
+
 /// 日常任务（Daily Task）数据模型
+@HiveType(typeId: 1)
 class DailyTask {
+  @HiveField(0)
   final String id;
+  @HiveField(1)
   final String userId;
+  @HiveField(2)
   final String title; // 任务名称
+  @HiveField(3)
   final String? description; // 任务描述
+  @HiveField(4)
   final DateTime? startTime; // 推荐执行时刻，使用固定日期锚点（例如 1970-01-01）
+  @HiveField(5)
   final String status; // active / paused
+  @HiveField(6)
   final String? category; // 分类标签
+  @HiveField(7)
   final String? color; // 颜色代码 (e.g., "#FF6B6B")
+  @HiveField(8)
   final DateTime? createdAt;
+  @HiveField(9)
   final DateTime? updatedAt;
 
   DailyTask({
@@ -125,13 +140,21 @@ class DailyTask {
 }
 
 /// 日常任务打卡记录
+@HiveType(typeId: 5)
 class DailyTaskLog {
+  @HiveField(0)
   final String id;
+  @HiveField(1)
   final String taskId;
+  @HiveField(2)
   final String userId;
+  @HiveField(3)
   final DateTime date; // YYYY-MM-DD
+  @HiveField(4)
   final bool completed;
+  @HiveField(5)
   final String? note;
+  @HiveField(6)
   final DateTime? createdAt;
 
   DailyTaskLog({
@@ -172,12 +195,19 @@ class DailyTaskLog {
 }
 
 /// 日常任务统计信息
+@HiveType(typeId: 6)
 class DailyTaskStats {
+  @HiveField(0)
   final String taskId;
+  @HiveField(1)
   final String title;
+  @HiveField(2)
   final int monthTotal;
+  @HiveField(3)
   final int monthCompleted;
+  @HiveField(4)
   final int completionRate; // 百分比 0-100
+  @HiveField(5)
   final int consecutiveDays;
 
   DailyTaskStats({

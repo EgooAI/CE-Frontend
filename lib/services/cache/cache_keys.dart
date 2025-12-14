@@ -87,4 +87,10 @@ class CacheKeys {
   /// 生成会话消息缓存键
   static String getConversationMessagesKey(String conversationId) =>
       '$conversationMessages$conversationId';
+
+  /// 生成按月份的日程缓存键
+  static String schedulesByMonth(int year, int month) {
+    final monthStr = month.toString().padLeft(2, '0');
+    return '${schedules}_${year}_$monthStr';
+  }
 }

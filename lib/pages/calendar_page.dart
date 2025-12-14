@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import '../models/schedule.dart';
 
-import '../services/schedule_service.dart';
+import '../repositories/schedule_repository.dart';
 import '../services/daily_task_service.dart';
+import '../services/schedule_service.dart';
 import '../widgets/schedule_card.dart';
 import '../widgets/create_schedule_bottom_sheet.dart';
 import 'package:flutter/rendering.dart';
@@ -19,8 +20,10 @@ class CalendarPage extends StatefulWidget {
 }
 
 class _CalendarPageState extends State<CalendarPage> {
-  final _scheduleService = ScheduleService();
+  final _scheduleRepository = ScheduleRepository();
   final _dailyTaskService = DailyTaskService();
+  // 用于特殊操作（如删除重复模板）的 Service 直接引用
+  final _scheduleService = ScheduleService();
 
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
@@ -81,9 +84,17 @@ class _CalendarPageState extends State<CalendarPage> {
 
     try {
       List<Schedule> schedules = [];
-      final initialSchedules = await _scheduleService.getSchedules();
+      
+      // 使用 Repository 按月加载（启用缓存）
+      final year = _focusedDay.year;
+      final month = _focusedDay.month;
+      final monthSchedules = await _scheduleRepository.getSchedules(
+        year: year,
+        month: month,
+      );
+      
       final currentUser = await AuthService().getProfile();
-      schedules = initialSchedules.where((s) => s.type != 'daily').toList();
+      schedules = monthSchedules.where((s) => s.type != 'daily').toList();
 
       // 如果启用在日历显示日常任务，加载日常数据
       if (currentUser.config.dailyScheduleDisplayInCalendar == true) {
@@ -299,7 +310,7 @@ class _CalendarPageState extends State<CalendarPage> {
   // 创建日程
   Future<void> _handleCreate(Schedule schedule) async {
     try {
-      await _scheduleService.createSchedule(schedule.toJson());
+      await _scheduleRepository.createSchedule(schedule);
 
       // 刷新列表
       await _loadSchedules();
@@ -333,7 +344,7 @@ class _CalendarPageState extends State<CalendarPage> {
   // 更新日程
   Future<void> _handleUpdate(String id, Schedule updatedSchedule) async {
     try {
-      await _scheduleService.updateSchedule(id, updatedSchedule.toJson());
+      await _scheduleRepository.updateSchedule(updatedSchedule);
 
       // 刷新列表
       await _loadSchedules();
@@ -369,7 +380,7 @@ class _CalendarPageState extends State<CalendarPage> {
   // 删除日程
   Future<void> _handleDelete(String id, {bool showSnackBar = true}) async {
     try {
-      await _scheduleService.deleteSchedule(id);
+      await _scheduleRepository.deleteSchedule(id);
 
       // 刷新列表
       await _loadSchedules();
@@ -450,10 +461,7 @@ class _CalendarPageState extends State<CalendarPage> {
       // 创建更新后的日程对象
       final updatedSchedule = schedule.copyWith(status: newStatus);
 
-      await _scheduleService.updateSchedule(
-        schedule.id,
-        updatedSchedule.toJson(),
-      );
+      await _scheduleRepository.updateSchedule(updatedSchedule);
 
       // 刷新列表
       await _loadSchedules();

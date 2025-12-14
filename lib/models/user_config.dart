@@ -1,5 +1,12 @@
+import 'package:hive/hive.dart';
+
+part 'user_config.g.dart';
+
+@HiveType(typeId: 3)
 class UserConfig {
+  @HiveField(0)
   final bool dailyScheduleDisplayInCalendar;
+  @HiveField(1)
   final bool use24HourFormat;
 
   UserConfig({
