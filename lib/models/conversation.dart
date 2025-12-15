@@ -68,6 +68,33 @@ class Conversation {
       rethrow;
     }
   }
+
+  /// 复制对象并修改指定字段
+  Conversation copyWith({
+    String? id,
+    String? title,
+    String? summary,
+    bool? isActive,
+    bool? isPinned,
+    int? messageCount,
+    DateTime? lastMessageAt,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    List<Message>? messages,
+  }) {
+    return Conversation(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      summary: summary ?? this.summary,
+      isActive: isActive ?? this.isActive,
+      isPinned: isPinned ?? this.isPinned,
+      messageCount: messageCount ?? this.messageCount,
+      lastMessageAt: lastMessageAt ?? this.lastMessageAt,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      messages: messages ?? this.messages,
+    );
+  }
 }
 
 @HiveType(typeId: 7)

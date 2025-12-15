@@ -149,6 +149,15 @@ class _ProfilePageState extends State<ProfilePage> {
                 },
               ),
               ListTile(
+                leading: const Icon(Icons.history),
+                title: const Text('日常记录'),
+                subtitle: const Text('查看打卡记录和坚持统计'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.pushNamed(context, '/daily-records');
+                },
+              ),
+              ListTile(
                 leading: const Icon(Icons.calendar_today),
                 title: const Text('日常事项在日历中显示'),
                 trailing: Switch(
@@ -205,6 +214,17 @@ class _ProfilePageState extends State<ProfilePage> {
                     }
                   },
                 ),
+              ),
+              const Divider(),
+              // 缓存管理入口
+              ListTile(
+                leading: const Icon(Icons.storage),
+                title: const Text('缓存管理'),
+                subtitle: const Text('查看和清理本地缓存'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.pushNamed(context, '/cache-management');
+                },
               ),
             ],
           ),

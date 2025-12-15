@@ -12,7 +12,7 @@
 - `id`: 任务唯一标识
 - `title`: 任务名称（如"晨跑"、"写日志"）
 - `description`: 任务描述（可选）
-- `startTime`: 推荐执行时刻，格式为 `1970-01-01T HH:mm:ssZ`（只取时分秒）
+- `startTime`: 推荐执行时刻，传 RFC3339（包含时区），后端会归一到 `1970-01-01` 保留时分秒（按 UTC 存储）
 - `status`: 任务状态，`active` 或 `paused`
 - `category`: 分类标签（可选，如"健康"、"工作"）
 - `color`: 颜色代码（可选，用于 UI 展示）
@@ -47,11 +47,13 @@ Content-Type: application/json
 {
   "title": "晨跑",
   "description": "每天清晨 6 点跑 5 km",
-  "startTime": "1970-01-01T06:00:00Z",
+  "startTime": "1970-01-01T06:00:00+08:00",
   "category": "健康",
   "color": "#FF6B6B"
 }
 ```
+
+> 也可以不传任何字段：后端会生成一个空白日常（只包含 id、userId、status=active），随后用 PUT 补充内容。
 
 **响应（201 Created）**
 ```json
@@ -150,7 +152,7 @@ PUT /api/daily-tasks/{taskId}
 {
   "title": "晨跑 + 冥想",
   "description": "6 点跑步，7 点冥想",
-  "startTime": "1970-01-01T06:30:00Z",
+  "startTime": "1970-01-01T06:30:00+08:00",
   "category": "健康",
   "color": "#4ECDC4"
 }
@@ -208,15 +210,7 @@ PATCH /api/daily-tasks/{taskId}/status
 ### 6. 删除日常任务
 ```
 DELETE /api/daily-tasks/{taskId}
-```
-
-**响应（200 OK）**
-```json
-{
-  "message": "Daily task deleted successfully"
-}
-```
-
+ - `todayCompleted`: 今日是否已完成（派生字段，列表接口直接返回）
 > **注意**：删除操作为软删除，任务不会立即从数据库删除，但前端查询时不会返回。
 
 ---
@@ -278,8 +272,27 @@ GET /api/daily-tasks/{taskId}/logs?days=30
       "date": "2025-12-14",
       "completed": true,
       "note": "跑了 5.5 km",
+### 7.1 取消今日打卡（软删除）
+```
+DELETE /api/daily-tasks/{taskId}/log/today
+```
+
+**响应（200 OK）**
+```json
+{
+  "message": "Today log cancelled"
+}
+```
+
+> 若今天尚无打卡记录，接口返回错误；已存在时执行软删除。
       "createdAt": "2025-12-14T18:30:00Z"
     },
+### 用户时区配置
+在用户配置中新增：
+- `config.timezone`: IANA 时区（推荐，如 `Asia/Shanghai`）
+- `config.utcOffsetMinutes`: 时区偏移（分钟，兜底）
+
+列表接口会按用户时区计算本地零点对应的 UTC 范围，直接返回 `todayCompleted`，前端无需逐个请求日志。
     {
       "id": "log-uuid-2",
       "taskId": "550e8400-e29b-41d4-a716-446655440000",

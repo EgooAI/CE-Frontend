@@ -1,15 +1,21 @@
 import 'dart:async';
 import 'dart:io' show Platform;
+import 'dart:math';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:get_it/get_it.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../models/conversation.dart';
+import '../repositories/conversation_repository.dart';
 import '../services/conversation_service.dart';
-import '../services/schedule_service.dart';
+import '../repositories/schedule_repository.dart';
 import '../services/xfyun_asr_service.dart';
 import '../services/audio_recorder_service.dart';
+import '../services/sync_queue_service.dart';
 import '../widgets/create_schedule_bottom_sheet.dart';
+import '../widgets/offline_banner.dart';
+import '../widgets/sync_indicator.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
@@ -21,8 +27,11 @@ class ChatPage extends StatefulWidget {
 class _ChatPageState extends State<ChatPage> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final ConversationRepository _conversationRepository =
+      ConversationRepository();
   final ConversationService _conversationService = ConversationService();
-  final ScheduleService _scheduleService = ScheduleService();
+  final ScheduleRepository _scheduleRepository = ScheduleRepository();
+  final _syncQueue = GetIt.instance<SyncQueueService>();
 
   List<Conversation> _conversations = [];
   Conversation? _currentConversation;
@@ -32,6 +41,8 @@ class _ChatPageState extends State<ChatPage> {
   StreamSubscription? _streamSub;
   bool _isLoading = false;
   bool _isSending = false;
+  bool _isSyncing = false;
+  int _pendingCount = 0;
 
   // 语音识别相关
   stt.SpeechToText? _speechToText; // iOS 语音识别
@@ -41,11 +52,30 @@ class _ChatPageState extends State<ChatPage> {
   String _recognizedText = ''; // 已识别的文本（最终累积结果）
   String _tempRecognizedText = ''; // 临时识别文本（中间结果）
 
+  // 搜索相关
+  final TextEditingController _searchController = TextEditingController();
+  bool _isSearching = false;
+  List<Conversation> _searchResults = [];
+  String _searchError = '';
+
   @override
   void initState() {
     super.initState();
     _loadConversations();
     _initVoiceInput();
+    _listenToPendingCount();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  /// 监听待同步任务数量
+  void _listenToPendingCount() {
+    _syncQueue.pendingCountStream.listen((count) {
+      if (mounted) {
+        setState(() {
+          _pendingCount = count;
+        });
+      }
+    });
   }
 
   /// 初始化语音输入（根据平台选择不同实现）
@@ -220,14 +250,35 @@ class _ChatPageState extends State<ChatPage> {
 
   Future<void> _loadConversations() async {
     try {
-      final conversations = await _conversationService.getConversations();
+      final conversations = await _conversationRepository.getConversations();
       setState(() {
         _conversations = conversations;
-        // 如果没有对话，自动创建一个默认对话
-        if (_conversations.isEmpty && _currentConversation == null) {
-          _createDefaultConversation();
+        // 如果有对话，自动进入最近一次的对话（首个为最近）
+        if (_conversations.isNotEmpty && _currentConversation == null) {
+          _currentConversation = _conversations.first;
+          _isLoading = true;
         }
       });
+
+      // 如果有对话，加载消息
+      if (_conversations.isNotEmpty && _currentConversation != null) {
+        try {
+          final detail = await _conversationRepository.getConversationDetail(
+            _currentConversation!.id,
+          );
+          setState(() {
+            _messages = detail.messages ?? [];
+            _isLoading = false;
+          });
+        } catch (e) {
+          if (mounted) {
+            setState(() => _isLoading = false);
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text('加载对话失败: $e')));
+          }
+        }
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -237,18 +288,71 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  Future<void> _createDefaultConversation() async {
+  /// 搜索框内容变化监听
+  void _onSearchChanged() {
+    // 如果清空了搜索框，恢复显示全部会话
+    if (_searchController.text.isEmpty && _isSearching) {
+      _clearSearch();
+    }
+  }
+
+  /// 执行搜索
+  Future<void> _performSearch() async {
+    final keyword = _searchController.text.trim();
+
+    if (keyword.isEmpty) {
+      _clearSearch();
+      return;
+    }
+
+    setState(() {
+      _isSearching = true;
+      _searchError = '';
+    });
+
     try {
-      final conversation = await _conversationService.createConversation(
-        "默认对话",
+      final results = await _conversationService.searchConversations(keyword);
+      setState(() {
+        _searchResults = results;
+        if (_searchResults.isEmpty) {
+          _searchError = '未搜索到相关会话';
+        }
+      });
+    } catch (e) {
+      setState(() {
+        _searchError = '搜索失败: $e';
+      });
+    }
+  }
+
+  /// 清除搜索状态
+  void _clearSearch() {
+    setState(() {
+      _isSearching = false;
+      _searchResults = [];
+      _searchError = '';
+    });
+  }
+
+  Future<void> _createNewConversation({bool closeDrawer = false}) async {
+    try {
+      final conversation = await _conversationRepository.createConversation(
+        "新对话",
       );
       setState(() {
-        _conversations.add(conversation);
+        _conversations.insert(0, conversation); // 插入到最前面
         _currentConversation = conversation;
         _messages = [];
       });
+      if (closeDrawer) {
+        Navigator.pop(context);
+      }
     } catch (e) {
-      // 静默失败，不显示错误，因为这不是用户主动操作
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('创建对话失败: $e')));
+      }
     }
   }
 
@@ -268,7 +372,7 @@ class _ChatPageState extends State<ChatPage> {
 
     try {
       // 获取对话详情（包含消息）
-      final detail = await _conversationService.getConversation(
+      final detail = await _conversationRepository.getConversationDetail(
         conversation.id,
       );
 
@@ -291,24 +395,97 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  Future<void> _createNewConversation({bool closeDrawer = false}) async {
-    try {
-      final conversation = await _conversationService.createConversation("新对话");
-      setState(() {
-        _conversations.insert(0, conversation);
-        _currentConversation = conversation;
-        _messages = [];
-      });
-      if (closeDrawer && mounted) {
-        Navigator.pop(context); // 关闭侧边栏
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('创建对话失败: $e')));
-      }
+  /// 根据第一条消息内容生成对话标题
+  ///
+  /// 流程：
+  /// 1. 检查是否是第一条消息
+  /// 2. 调用 API 生成标题（异步，不阻塞消息发送）
+  /// 3. 生成成功后用新标题覆盖原有标题
+  /// 4. 发生失败则保持原有标题
+  Future<void> _generateAndUpdateTitle(String messageContent) async {
+    if (_currentConversation == null) {
+      print('[AutoTitle] ❌ 对话为空，无法生成标题');
+      return;
     }
+
+    try {
+      print('[AutoTitle] 🚀 开始生成标题');
+      print(
+        '[AutoTitle] 📝 消息内容: ${messageContent.substring(0, min(messageContent.length, 50))}...',
+      );
+      print('[AutoTitle] 🔗 对话 ID: ${_currentConversation!.id}');
+      print('[AutoTitle] 📌 当前标题: ${_currentConversation!.title}');
+
+      final conversationService = GetIt.instance<ConversationService>();
+
+      print('[AutoTitle] 📡 调用 API: POST /api/conversations/generate-title');
+      final generatedTitle = await conversationService.generateTitle(
+        messageContent,
+      );
+
+      print('[AutoTitle] ✅ 标题生成成功: $generatedTitle');
+
+      if (!mounted) {
+        print('[AutoTitle] ⚠️  Widget 已卸载，跳过 UI 更新');
+        return;
+      }
+
+      // 用新标题覆盖原有标题
+      setState(() {
+        _currentConversation = _currentConversation!.copyWith(
+          title: generatedTitle,
+        );
+
+        print('[AutoTitle] 🎨 UI 已更新，新标题: $generatedTitle');
+
+        // 同时更新对话列表中的标题
+        final index = _conversations.indexWhere(
+          (c) => c.id == _currentConversation!.id,
+        );
+        if (index != -1) {
+          _conversations[index] = _currentConversation!;
+          print('[AutoTitle] 📋 对话列表已更新，位置: $index');
+        }
+      });
+
+      // 异步更新后端和缓存（不需要等待）
+      _updateConversationTitleInBackground(
+        _currentConversation!.id,
+        generatedTitle,
+      );
+    } catch (e) {
+      print('[AutoTitle] ❌ 生成标题失败: $e');
+      print('[AutoTitle] 💭 保持使用原有标题: ${_currentConversation!.title}');
+    }
+  }
+
+  /// 后台更新对话标题到后端
+  ///
+  /// 这个方法在后台异步执行，不阻塞 UI
+  void _updateConversationTitleInBackground(
+    String conversationId,
+    String newTitle,
+  ) {
+    // 后台异步更新（使用 microtask 模式）
+    Future.microtask(() async {
+      try {
+        print('[BackgroundUpdate] 🔄 后台更新开始: 对话 ID = $conversationId');
+        print('[BackgroundUpdate] 📝 新标题 = $newTitle');
+
+        final conversationService = GetIt.instance<ConversationService>();
+
+        // 调用 PUT 接口更新对话标题到后端
+        // 注意：此方法的端点是 /conversations/$id/title
+        final updatedConversation = await conversationService
+            .updateConversationTitle(conversationId, newTitle);
+
+        print('[BackgroundUpdate] ✅ 后台更新完成');
+        print('[BackgroundUpdate] 💾 服务端返回标题: ${updatedConversation.title}');
+      } catch (e) {
+        print('[BackgroundUpdate] ❌ 后台更新失败: $e');
+        // 失败不影响前端 UI，用户已经看到新标题了
+      }
+    });
   }
 
   Future<void> _sendMessage() async {
@@ -320,7 +497,7 @@ class _ChatPageState extends State<ChatPage> {
     if (_currentConversation == null) {
       // 如果没有当前对话，先创建一个默认对话
       try {
-        final conversation = await _conversationService.createConversation(
+        final conversation = await _conversationRepository.createConversation(
           "新对话",
         );
         setState(() {
@@ -339,6 +516,12 @@ class _ChatPageState extends State<ChatPage> {
         return;
       }
     }
+
+    // 检查是否是第一条消息（用于自动生成标题）
+    final isFirstMessage = _messages.isEmpty;
+    print(
+      '[AutoTitle] 消息发送前检查 - 是否第一条消息: $isFirstMessage, 当前消息数: ${_messages.length}',
+    );
 
     // 添加临时用户消息
     final tempUserMessage = Message(
@@ -376,10 +559,16 @@ class _ChatPageState extends State<ChatPage> {
     _streamingThoughts = [];
     _streamingContent = '';
 
+    // 如果是第一条消息，异步生成标题（不阻塞消息发送）
+    if (isFirstMessage) {
+      _generateAndUpdateTitle(content);
+    }
+
     try {
       // 使用流式接口
       _streamSub?.cancel();
-      _streamSub = _conversationService
+      final conversationService = GetIt.instance<ConversationService>();
+      _streamSub = conversationService
           .sendMessageStream(_currentConversation!.id, content)
           .listen(
             (event) {
@@ -630,7 +819,7 @@ class _ChatPageState extends State<ChatPage> {
       onSave: (schedule) async {
         try {
           // 调用 API 创建日程
-          await _scheduleService.createSchedule(schedule.toJson());
+          await _scheduleRepository.createSchedule(schedule);
 
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -888,72 +1077,77 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Widget _buildWelcomeGuide() {
+    // 判断是否应该显示完整教程：只有在没有对话列表时才显示完整教程
+    final showFullGuide = _conversations.isEmpty;
+
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // 主图标
-            Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
-                shape: BoxShape.circle,
+            // 仅当没有对话列表时显示完整教程
+            if (showFullGuide) ...[
+              // 主图标
+              Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.chat_bubble_outline,
+                  size: 50,
+                  color: Colors.blue,
+                ),
               ),
-              child: const Icon(
-                Icons.chat_bubble_outline,
-                size: 50,
+              const SizedBox(height: 24),
+
+              // 欢迎标题
+              const Text(
+                '👋 欢迎使用 懒得记',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // 副标题
+              Text(
+                '我可以帮你完成以下任务',
+                style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+              ),
+              const SizedBox(height: 32),
+
+              // 功能卡片
+              _buildFeatureCard(
+                icon: Icons.calendar_today,
+                title: '📅 智能日程管理',
+                description: '你可以直接将通知信息复制到这里，也可以告诉我"明天下午3点开会"，我会自动为您解析日程',
                 color: Colors.blue,
               ),
-            ),
-            const SizedBox(height: 24),
+              const SizedBox(height: 16),
 
-            // 欢迎标题
-            const Text(
-              '👋 欢迎使用 懒得记',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
+              _buildFeatureCard(
+                icon: Icons.mic,
+                title: '🎤 语音输入',
+                description: '点击麦克风图标，用语音快速输入消息',
+                color: Colors.orange,
               ),
-            ),
-            const SizedBox(height: 12),
+              const SizedBox(height: 16),
 
-            // 副标题
-            Text(
-              '我可以帮你完成以下任务',
-              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 32),
-
-            // 功能卡片
-            _buildFeatureCard(
-              icon: Icons.calendar_today,
-              title: '📅 智能日程管理',
-              description: '你可以直接将通知信息复制到这里，也可以告诉我"明天下午3点开会"，我会自动为您解析日程',
-              color: Colors.blue,
-            ),
-            const SizedBox(height: 16),
-
-            _buildFeatureCard(
-              icon: Icons.mic,
-              title: '🎤 语音输入',
-              description: '点击麦克风图标，用语音快速输入消息',
-              color: Colors.orange,
-            ),
-            const SizedBox(height: 16),
-
-            _buildFeatureCard(
-              icon: Icons.psychology,
-              title: '🤖 智能对话',
-              description: '我会记住对话上下文，提供更精准的回答',
-              color: Colors.purple,
-            ),
-            const SizedBox(height: 32),
-
-            // 快捷示例
+              _buildFeatureCard(
+                icon: Icons.psychology,
+                title: '🤖 智能对话',
+                description: '我会记住对话上下文，提供更精准的回答',
+                color: Colors.purple,
+              ),
+              const SizedBox(height: 32),
+            ],
+            // 所有情况下都显示'试试这些问题'
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -1196,7 +1390,7 @@ class _ChatPageState extends State<ChatPage> {
         newTitle.isNotEmpty &&
         newTitle != conversation.title) {
       try {
-        final updatedConversation = await _conversationService
+        final updatedConversation = await _conversationRepository
             .updateConversationTitle(conversation.id, newTitle);
         setState(() {
           _conversations[index] = updatedConversation;
@@ -1217,6 +1411,7 @@ class _ChatPageState extends State<ChatPage> {
   @override
   void dispose() {
     _controller.dispose();
+    _searchController.dispose();
     _scrollController.dispose();
     _streamSub?.cancel();
 
@@ -1226,6 +1421,120 @@ class _ChatPageState extends State<ChatPage> {
     _audioRecorder?.dispose();
 
     super.dispose();
+  }
+
+  /// 构建会话列表（根据搜索状态显示不同内容）
+  Widget _buildConversationList() {
+    // 如果正在搜索，显示搜索结果
+    if (_isSearching) {
+      if (_searchError.isNotEmpty) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Text(
+              _searchError,
+              style: const TextStyle(color: Colors.grey),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        );
+      }
+
+      if (_searchResults.isEmpty) {
+        return const Center(
+          child: Padding(
+            padding: EdgeInsets.all(20.0),
+            child: Text('未搜索到相关会话', style: TextStyle(color: Colors.grey)),
+          ),
+        );
+      }
+
+      return ListView.builder(
+        itemCount: _searchResults.length,
+        itemBuilder: (context, index) {
+          final conversation = _searchResults[index];
+          return _buildConversationItem(conversation, index);
+        },
+      );
+    }
+
+    // 正常显示全部会话
+    return ListView.builder(
+      itemCount: _conversations.length,
+      itemBuilder: (context, index) {
+        final conversation = _conversations[index];
+        return _buildConversationItem(conversation, index);
+      },
+    );
+  }
+
+  /// 构建单个会话项
+  Widget _buildConversationItem(Conversation conversation, int index) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 2.0),
+      child: ListTile(
+        title: Text(conversation.title),
+        subtitle: Text(conversation.updatedAt.toString().split('.')[0]),
+        selected: _currentConversation?.id == conversation.id,
+        selectedTileColor: Colors.grey[300],
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(8)),
+        ),
+        onTap: () => _selectConversation(conversation, closeDrawer: true),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.edit, size: 16),
+              onPressed: () => _editConversationTitle(conversation, index),
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete, size: 16),
+              onPressed: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('删除对话'),
+                    content: const Text('确定要删除这个对话吗？'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('取消'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('删除'),
+                      ),
+                    ],
+                  ),
+                );
+
+                if (confirm == true) {
+                  try {
+                    await _conversationRepository.deleteConversation(
+                      conversation.id,
+                    );
+                    setState(() {
+                      _conversations.removeAt(index);
+                      if (_currentConversation?.id == conversation.id) {
+                        _currentConversation = null;
+                        _messages = [];
+                      }
+                    });
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(SnackBar(content: Text('删除失败: $e')));
+                    }
+                  }
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -1244,6 +1553,20 @@ class _ChatPageState extends State<ChatPage> {
             );
           },
         ),
+        actions: [
+          // 新建对话按钮
+          IconButton(
+            icon: const Icon(Icons.add),
+            onPressed: () => _createNewConversation(),
+            tooltip: '新建对话',
+          ),
+          // 同步状态指示器
+          if (_isSyncing)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: SyncIndicator(isSyncing: true, size: 20),
+            ),
+        ],
       ),
       drawer: Drawer(
         width: 340,
@@ -1260,127 +1583,74 @@ class _ChatPageState extends State<ChatPage> {
             //     child: Icon(Icons.chat),
             //   ),
             // ),
-            const SizedBox(height: 32.0),
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Container(
-                height: 40,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey[400]!),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Row(
-                  children: const [
-                    Icon(Icons.search, color: Colors.grey),
-                    SizedBox(width: 8),
-                    Text('搜索...', style: TextStyle(color: Colors.grey)),
-                    Spacer(),
-                    Icon(Icons.edit_note, color: Colors.black54),
-                  ],
-                ),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.add),
-              title: const Text('新建对话'),
-              onTap: () => _createNewConversation(closeDrawer: true),
-            ),
-            const Divider(),
-            const SizedBox(height: 8),
-            Expanded(
-              child: ListView.builder(
-                itemCount: _conversations.length,
-                itemBuilder: (context, index) {
-                  final conversation = _conversations[index];
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Center(
-                      child: ListTile(
-                        title: Text(conversation.title),
-                        subtitle: Text(
-                          conversation.updatedAt.toString().split('.')[0],
+            Container(
+              color: Colors.grey[100],
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 32.0),
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        hintText: '搜索会话标题...',
+                        prefixIcon: const Icon(
+                          Icons.search,
+                          color: Colors.grey,
                         ),
-                        selected: _currentConversation?.id == conversation.id,
-                        selectedTileColor: Colors.black12,
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(8)),
+                        suffixIcon: _searchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 20),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  _clearSearch();
+                                },
+                              )
+                            : null,
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Colors.grey[400]!),
                         ),
-                        onTap: () => _selectConversation(
-                          conversation,
-                          closeDrawer: true,
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Colors.grey[400]!),
                         ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.edit, size: 16),
-                              onPressed: () =>
-                                  _editConversationTitle(conversation, index),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete, size: 16),
-                              onPressed: () async {
-                                // 确认删除
-                                final confirm = await showDialog<bool>(
-                                  context: context,
-                                  builder: (context) => AlertDialog(
-                                    title: const Text('删除对话'),
-                                    content: const Text('确定要删除这个对话吗？'),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () =>
-                                            Navigator.pop(context, false),
-                                        child: const Text('取消'),
-                                      ),
-                                      TextButton(
-                                        onPressed: () =>
-                                            Navigator.pop(context, true),
-                                        child: const Text('删除'),
-                                      ),
-                                    ],
-                                  ),
-                                );
-
-                                if (confirm == true) {
-                                  try {
-                                    await _conversationService
-                                        .deleteConversation(conversation.id);
-                                    setState(() {
-                                      _conversations.removeAt(index);
-                                      if (_currentConversation?.id ==
-                                          conversation.id) {
-                                        _currentConversation = null;
-                                        _messages = [];
-                                      }
-                                    });
-                                  } catch (e) {
-                                    if (mounted) {
-                                      // ignore: use_build_context_synchronously
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        SnackBar(content: Text('删除失败: $e')),
-                                      );
-                                    }
-                                  }
-                                }
-                              },
-                            ),
-                          ],
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(
+                            color: Colors.blue,
+                            width: 2,
+                          ),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
                         ),
                       ),
+                      onSubmitted: (_) => _performSearch(),
                     ),
-                  );
-                },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.add),
+                    title: const Text('新建对话'),
+                    onTap: () => _createNewConversation(closeDrawer: true),
+                  ),
+                  const Divider(height: 1),
+                ],
               ),
             ),
+            Expanded(child: _buildConversationList()),
           ],
         ),
       ),
       body: Column(
         children: [
+          // 离线状态横幅
+          OfflineBanner(showPendingCount: true, pendingCount: _pendingCount),
+          // 主体内容
           Expanded(
             child: _currentConversation == null
                 ? _buildWelcomeGuide()

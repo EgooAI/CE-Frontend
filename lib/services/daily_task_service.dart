@@ -122,6 +122,15 @@ class DailyTaskService {
     }
   }
 
+  /// 取消今日打卡
+  Future<void> cancelTodayLog(String taskId) async {
+    try {
+      await ApiClient.instance.delete('/daily-tasks/$taskId/log/today');
+    } on DioException catch (e) {
+      throw Exception(e.message ?? '取消打卡失败');
+    }
+  }
+
   /// 获取打卡记录
   Future<List<DailyTaskLog>> getDailyTaskLogs(
     String taskId, {

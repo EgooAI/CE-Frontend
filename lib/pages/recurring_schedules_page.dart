@@ -133,7 +133,7 @@ class _RecurringSchedulesPageState extends State<RecurringSchedulesPage> {
     try {
       await _scheduleService.deleteRecurrenceTemplate(
         template.id,
-        strategy: action,
+        deleteInstances: action,
       );
 
       if (mounted) {
@@ -196,7 +196,8 @@ class _RecurringSchedulesPageState extends State<RecurringSchedulesPage> {
     showCreateScheduleBottomSheet(
       context,
       existingSchedule: template,
-      onSave: (schedule) => _handleSaveSchedule(schedule, isCreate: false),
+      onSave: (schedule) =>
+          _handleSaveSchedule(schedule, isCreate: false, template: template),
     );
   }
 
@@ -204,6 +205,7 @@ class _RecurringSchedulesPageState extends State<RecurringSchedulesPage> {
   Future<void> _handleSaveSchedule(
     Schedule schedule, {
     required bool isCreate,
+    Schedule? template,
   }) async {
     try {
       if (isCreate) {
@@ -219,8 +221,16 @@ class _RecurringSchedulesPageState extends State<RecurringSchedulesPage> {
           );
         }
       } else {
-        // 编辑
-        await _scheduleService.updateSchedule(schedule.id, schedule.toJson());
+        // 编辑：模板不需要范围选择，直接更新模板系列配置；实例走单条更新
+        if (template != null && template.parentId == null) {
+          await _scheduleService.updateRecurrenceSeries(
+            template.id,
+            schedule.toJson(),
+          );
+        } else {
+          // 普通实例或非模板，直接更新单条
+          await _scheduleService.updateSchedule(schedule.id, schedule.toJson());
+        }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -245,6 +255,8 @@ class _RecurringSchedulesPageState extends State<RecurringSchedulesPage> {
       }
     }
   }
+
+  // 模板编辑不需要范围选择，已移除策略对话框
 
   @override
   Widget build(BuildContext context) {

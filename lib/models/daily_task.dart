@@ -25,6 +25,8 @@ class DailyTask {
   final DateTime? createdAt;
   @HiveField(9)
   final DateTime? updatedAt;
+  @HiveField(10)
+  final bool? todayCompleted; // 今日是否已完成打卡
 
   DailyTask({
     required this.id,
@@ -37,6 +39,7 @@ class DailyTask {
     this.color,
     this.createdAt,
     this.updatedAt,
+    this.todayCompleted,
   });
 
   factory DailyTask.fromJson(Map<String, dynamic> json) {
@@ -57,6 +60,7 @@ class DailyTask {
       updatedAt: json['updatedAt'] != null
           ? DateTime.parse(json['updatedAt']).toLocal()
           : null,
+      todayCompleted: json['todayCompleted'] as bool?,
     );
   }
 
@@ -91,6 +95,7 @@ class DailyTask {
       if (color != null) 'color': color,
       if (createdAt != null) 'createdAt': formatDateTime(createdAt!),
       if (updatedAt != null) 'updatedAt': formatDateTime(updatedAt!),
+      if (todayCompleted != null) 'todayCompleted': todayCompleted,
     };
   }
 
@@ -106,6 +111,7 @@ class DailyTask {
     String? color,
     DateTime? createdAt,
     DateTime? updatedAt,
+    bool? todayCompleted,
   }) {
     return DailyTask(
       id: id ?? this.id,
@@ -118,6 +124,7 @@ class DailyTask {
       color: color ?? this.color,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      todayCompleted: todayCompleted ?? this.todayCompleted,
     );
   }
 

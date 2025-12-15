@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:get_it/get_it.dart';
 import '../models/schedule.dart';
-import '../services/schedule_service.dart';
+import '../repositories/schedule_repository.dart';
 import '../services/auth_service.dart';
+import '../services/schedule_service.dart';
+import '../services/sync_queue_service.dart';
 import '../widgets/schedule_card.dart';
 import '../widgets/create_schedule_bottom_sheet.dart';
+import '../widgets/offline_banner.dart';
+import '../widgets/sync_indicator.dart';
 
 /// 任务页面：所有日程的集中显示管理
 class TaskPage extends StatefulWidget {
@@ -15,7 +20,8 @@ class TaskPage extends StatefulWidget {
 
 class _TaskPageState extends State<TaskPage>
     with SingleTickerProviderStateMixin {
-  final _scheduleService = ScheduleService();
+  final _scheduleRepository = ScheduleRepository();
+  final _syncQueue = GetIt.instance<SyncQueueService>();
 
   late TabController _tabController;
   List<Schedule> _allTasks = [];
@@ -30,14 +36,14 @@ class _TaskPageState extends State<TaskPage>
 
   final Map<String, String> _scheduleTypeOptions = {
     'all': '全部日程',
-    'daily': '日常',
     'task': '任务',
     'meeting': '会议',
     'event': '事件',
   };
 
-  bool _isLoading = true;
   String? _errorMessage;
+  bool _isSyncing = false;
+  int _pendingCount = 0;
 
   // Tab 配置
   final List<TaskTab> _tabs = [
@@ -55,6 +61,42 @@ class _TaskPageState extends State<TaskPage>
     _tabController = TabController(length: _tabs.length, vsync: this);
     _loadTasks();
     _loadConfig();
+    _listenToPendingCount();
+  }
+
+  /// 监听待同步任务数量
+  void _listenToPendingCount() {
+    _syncQueue.pendingCountStream.listen((count) {
+      if (mounted) {
+        setState(() {
+          _pendingCount = count;
+        });
+      }
+    });
+  }
+
+  /// 手动触发同步
+  Future<void> _triggerManualSync() async {
+    setState(() => _isSyncing = true);
+    try {
+      await _syncQueue.processPendingTasks();
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('同步完成')));
+        _loadTasks();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('同步失败: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSyncing = false);
+      }
+    }
   }
 
   @override
@@ -91,12 +133,11 @@ class _TaskPageState extends State<TaskPage>
   // 加载任务数据
   Future<void> _loadTasks() async {
     setState(() {
-      _isLoading = true;
       _errorMessage = null;
     });
 
     try {
-      final allSchedules = await _scheduleService.getSchedules();
+      final allSchedules = await _scheduleRepository.getAllSchedules();
 
       // 显示所有类型的日程（不区分 task/event/meeting）
       // 按开始时间排序
@@ -104,12 +145,10 @@ class _TaskPageState extends State<TaskPage>
 
       setState(() {
         _allTasks = allSchedules;
-        _isLoading = false;
       });
     } catch (e) {
       setState(() {
         _errorMessage = e.toString().replaceAll('Exception: ', '');
-        _isLoading = false;
       });
     }
   }
@@ -277,7 +316,7 @@ class _TaskPageState extends State<TaskPage>
   // 创建任务
   Future<void> _handleCreate(Schedule task) async {
     try {
-      await _scheduleService.createSchedule(task.toJson());
+      await _scheduleRepository.createSchedule(task);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -329,7 +368,7 @@ class _TaskPageState extends State<TaskPage>
   // 更新任务
   Future<void> _handleUpdate(String id, Schedule updatedTask) async {
     try {
-      await _scheduleService.updateSchedule(id, updatedTask.toJson());
+      await _scheduleRepository.updateSchedule(updatedTask);
       await _loadTasks();
 
       if (mounted) {
@@ -360,7 +399,7 @@ class _TaskPageState extends State<TaskPage>
   // 删除任务
   Future<void> _handleDelete(String id) async {
     try {
-      await _scheduleService.deleteSchedule(id);
+      await _scheduleRepository.deleteSchedule(id);
       await _loadTasks();
 
       if (mounted) {
@@ -389,17 +428,21 @@ class _TaskPageState extends State<TaskPage>
   }
 
   // 删除重复任务模板
-  Future<void> _handleDeleteSeries(String templateId, String strategy) async {
+  Future<void> _handleDeleteSeries(
+    String parentId,
+    String deleteInstances,
+  ) async {
     try {
-      await _scheduleService.deleteRecurrenceTemplate(
-        templateId,
-        strategy: strategy,
+      final scheduleService = GetIt.instance<ScheduleService>();
+      await scheduleService.deleteRecurrenceTemplate(
+        parentId,
+        deleteInstances: deleteInstances,
       );
       await _loadTasks();
 
       if (mounted) {
-        final strategyText =
-            {'future': '模板+待办实例', 'all': '模板+全部实例'}[strategy] ?? '仅模板';
+        final deleteText =
+            {'future': '模板+待办实例', 'all': '模板+全部实例'}[deleteInstances] ?? '仅模板';
 
         Future.microtask(() {
           if (mounted) {
@@ -407,7 +450,7 @@ class _TaskPageState extends State<TaskPage>
               ..hideCurrentSnackBar()
               ..showSnackBar(
                 SnackBar(
-                  content: Text('已删除：$strategyText'),
+                  content: Text('已删除：$deleteText'),
                   duration: const Duration(seconds: 2),
                   behavior: SnackBarBehavior.floating,
                 ),
@@ -514,7 +557,7 @@ class _TaskPageState extends State<TaskPage>
 
     for (final id in idsToDelete) {
       try {
-        await _scheduleService.deleteSchedule(id);
+        await _scheduleRepository.deleteSchedule(id);
         successCount++;
       } catch (e) {
         failCount++;
@@ -551,7 +594,7 @@ class _TaskPageState extends State<TaskPage>
   Future<void> _handleStatusChange(Schedule task, String newStatus) async {
     try {
       final updatedTask = task.copyWith(status: newStatus);
-      await _scheduleService.updateSchedule(task.id, updatedTask.toJson());
+      await _scheduleRepository.updateSchedule(updatedTask);
       await _loadTasks();
 
       if (mounted) {
@@ -679,31 +722,46 @@ class _TaskPageState extends State<TaskPage>
           }).toList(),
         ),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _errorMessage != null
-          ? _buildErrorView()
-          : Stack(
-              children: [
-                TabBarView(
-                  controller: _tabController,
-                  children: _tabs
-                      .map(
-                        (tab) =>
-                            _buildTaskList(tab.status, currentFilteredTasks),
-                      )
-                      .toList(),
-                ),
-                // 批量操作底部栏
-                if (_isSelectionMode && _selectedTaskIds.isNotEmpty)
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: _buildBatchActionBar(),
+      body: Column(
+        children: [
+          // 离线状态横幅
+          OfflineBanner(showPendingCount: true, pendingCount: _pendingCount),
+          // 主体内容
+          Expanded(
+            child: _errorMessage != null
+                ? _buildErrorView()
+                : Stack(
+                    children: [
+                      TabBarView(
+                        controller: _tabController,
+                        children: _tabs
+                            .map(
+                              (tab) => _buildTaskList(
+                                tab.status,
+                                currentFilteredTasks,
+                              ),
+                            )
+                            .toList(),
+                      ),
+                      // 批量操作底部栏
+                      if (_isSelectionMode && _selectedTaskIds.isNotEmpty)
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          child: _buildBatchActionBar(),
+                        ),
+                    ],
                   ),
-              ],
-            ),
+          ),
+        ],
+      ),
+      // 浮动同步按钮
+      floatingActionButton: FloatingSyncButton(
+        isSyncing: _isSyncing,
+        pendingCount: _pendingCount,
+        onTap: _triggerManualSync,
+      ),
     );
   }
 

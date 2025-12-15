@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:workmanager/workmanager.dart';
 import 'pages/login_page.dart';
 import 'pages/main_page.dart';
 import 'pages/edit_email_page.dart';
@@ -8,8 +10,11 @@ import 'pages/edit_username_page.dart';
 import 'pages/edit_password_page.dart';
 import 'pages/reminders_page.dart'; // ignore: unused_import
 import 'pages/recurring_schedules_page.dart';
+import 'pages/cache_management_page.dart';
+import 'pages/daily_records_page.dart';
 import 'services/auth_service.dart';
 import 'services/api_client.dart';
+import 'services/sync_scheduler.dart';
 import 'models/user.dart';
 import 'utils/service_locator.dart';
 
@@ -27,6 +32,25 @@ void main() async {
 
   // 设置全局 Navigator Key 到 ApiClient
   ApiClient.navigatorKey = navigatorKey;
+
+  // 初始化 WorkManager（后台任务）- 仅在非 Web 平台
+  if (!kIsWeb) {
+    try {
+      await Workmanager().initialize(
+        syncQueueCallback, // 后台任务回调函数
+        isInDebugMode: false, // 生产环境关闭调试
+      );
+      print('[Main] WorkManager 初始化完成');
+    } catch (e) {
+      print('[Main] ⚠️ WorkManager 初始化失败（可能不支持当前平台）: $e');
+    }
+  } else {
+    print('[Main] ℹ️ Web 平台跳过 WorkManager 初始化');
+  }
+
+  // 启动同步调度器（网络监听 + 定期同步）
+  final syncScheduler = SyncScheduler();
+  await syncScheduler.init();
 
   // 强制竖屏（仅在移动平台）
   try {
@@ -150,6 +174,8 @@ class _MyAppState extends State<MyApp> {
         '/login': (context) => const LoginPage(),
         '/reminders': (context) => const RemindersPage(),
         '/recurring-schedules': (context) => const RecurringSchedulesPage(),
+        '/cache-management': (context) => const CacheManagementPage(),
+        '/daily-records': (context) => const DailyRecordsPage(),
       },
       onGenerateRoute: (settings) {
         if (settings.name == '/edit-email') {

@@ -142,19 +142,51 @@ class ApiClient {
               }
             }
 
-            // 处理错误响应中的统一格式
-            if (error.response?.data is Map<String, dynamic>) {
-              final data = error.response!.data as Map<String, dynamic>;
-              if (data.containsKey('message')) {
-                error = DioException(
-                  requestOptions: error.requestOptions,
-                  response: error.response,
-                  type: error.type,
-                  error: data['message'],
-                  message: data['message'] as String,
-                );
-              }
+            // 优化错误信息：将技术性错误转换为友好提示
+            String friendlyMessage = error.message ?? '网络请求失败';
+
+            switch (error.type) {
+              case DioExceptionType.connectionTimeout:
+                friendlyMessage = '连接服务器超时，请检查网络连接';
+                break;
+              case DioExceptionType.sendTimeout:
+                friendlyMessage = '发送请求超时，请检查网络连接';
+                break;
+              case DioExceptionType.receiveTimeout:
+                friendlyMessage = '服务器响应超时，请稍后重试';
+                break;
+              case DioExceptionType.badCertificate:
+                friendlyMessage = '安全证书验证失败';
+                break;
+              case DioExceptionType.badResponse:
+                // 保持原有的错误消息（来自服务器）
+                if (error.response?.data is Map<String, dynamic>) {
+                  final data = error.response!.data as Map<String, dynamic>;
+                  if (data.containsKey('message')) {
+                    friendlyMessage = data['message'] as String;
+                  }
+                }
+                break;
+              case DioExceptionType.cancel:
+                friendlyMessage = '请求已取消';
+                break;
+              case DioExceptionType.connectionError:
+                friendlyMessage = '无法连接到服务器，请检查网络';
+                break;
+              case DioExceptionType.unknown:
+                friendlyMessage = '网络请求失败，请稍后重试';
+                break;
             }
+
+            // 创建优化后的错误
+            error = DioException(
+              requestOptions: error.requestOptions,
+              response: error.response,
+              type: error.type,
+              error: error.error,
+              message: friendlyMessage,
+            );
+
             handler.next(error);
           },
         ),

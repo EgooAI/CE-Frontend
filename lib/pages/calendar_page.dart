@@ -2,14 +2,20 @@
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import '../models/schedule.dart';
+import '../models/daily_task.dart';
 
 import '../repositories/schedule_repository.dart';
 import '../services/daily_task_service.dart';
 import '../services/schedule_service.dart';
+import '../services/sync_queue_service.dart';
 import '../widgets/schedule_card.dart';
+import '../widgets/daily_task_card.dart';
 import '../widgets/create_schedule_bottom_sheet.dart';
+import '../widgets/offline_banner.dart';
+import '../widgets/sync_indicator.dart';
 import 'package:flutter/rendering.dart';
 import 'package:intl/intl.dart';
+import 'package:get_it/get_it.dart';
 // import 'package:flutter_animate/flutter_animate.dart';
 
 class CalendarPage extends StatefulWidget {
@@ -24,6 +30,7 @@ class _CalendarPageState extends State<CalendarPage> {
   final _dailyTaskService = DailyTaskService();
   // 用于特殊操作（如删除重复模板）的 Service 直接引用
   final _scheduleService = ScheduleService();
+  final _syncQueue = GetIt.instance<SyncQueueService>();
 
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
@@ -31,8 +38,13 @@ class _CalendarPageState extends State<CalendarPage> {
 
   Map<DateTime, List<Schedule>> _scheduleMap = {};
   final Set<String> _expandedScheduleIds = {};
+  // 活跃的日常任务列表（不按天区分，按选中日期展示）
+  List<DailyTask> _dailyTasks = [];
+  // 是否在日历中显示日常任务
+  bool _showDailyTasksInCalendar = true;
 
-  bool _isLoading = true;
+  bool _isSyncing = false;
+  int _pendingCount = 0;
 
   @override
   void initState() {
@@ -40,6 +52,97 @@ class _CalendarPageState extends State<CalendarPage> {
     _selectedDay = _focusedDay;
     _loadSchedules();
     _loadConfig();
+    _listenToPendingCount();
+  }
+
+  /// 监听待同步任务数量
+  void _listenToPendingCount() {
+    _syncQueue.pendingCountStream.listen((count) {
+      if (mounted) {
+        setState(() {
+          _pendingCount = count;
+        });
+      }
+    });
+  }
+
+  /// 手动触发同步
+  Future<void> _triggerManualSync() async {
+    setState(() => _isSyncing = true);
+    try {
+      await _syncQueue.processPendingTasks();
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('同步完成')));
+        // 同步完成后刷新数据
+        _loadSchedules();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('同步失败: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSyncing = false);
+      }
+    }
+  }
+
+  /// 下拉刷新（强制从 API 获取最新数据）
+  Future<void> _handlePullToRefresh() async {
+    try {
+      final year = _focusedDay.year;
+      final month = _focusedDay.month;
+
+      // 使用 refreshSchedules 强制刷新，忽略缓存
+      final monthSchedules = await _scheduleRepository.refreshSchedules(
+        year: year,
+        month: month,
+      );
+
+      final currentUser = await AuthService().getProfile();
+      final schedules = monthSchedules.where((s) => s.type != 'daily').toList();
+
+      if (currentUser.config.dailyScheduleDisplayInCalendar == true) {
+        try {
+          final tasks = await _dailyTaskService.getDailyTasks(status: 'active');
+          setState(() {
+            _dailyTasks = tasks;
+          });
+        } catch (e) {
+          debugPrint('加载日常任务失败: $e');
+        }
+      }
+
+      // 将日程转换为 Map
+      final scheduleMap = <DateTime, List<Schedule>>{};
+      for (final schedule in schedules) {
+        final date = DateTime(
+          schedule.startTime.year,
+          schedule.startTime.month,
+          schedule.startTime.day,
+        );
+        scheduleMap.putIfAbsent(date, () => []).add(schedule);
+      }
+
+      if (mounted) {
+        setState(() {
+          _scheduleMap = scheduleMap;
+        });
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('刷新成功')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('刷新失败: $e')));
+      }
+    }
   }
 
   Future<void> _loadConfig() async {
@@ -48,6 +151,12 @@ class _CalendarPageState extends State<CalendarPage> {
       if (!mounted) return;
       setState(() {
         _use24HourFormat = profile.config.use24HourFormat;
+        _showDailyTasksInCalendar =
+            profile.config.dailyScheduleDisplayInCalendar == true;
+        // 如果关闭了显示，清空日常任务列表
+        if (!_showDailyTasksInCalendar) {
+          _dailyTasks = [];
+        }
       });
     } catch (_) {
       // 忽略配置加载失败
@@ -78,13 +187,9 @@ class _CalendarPageState extends State<CalendarPage> {
 
   // 加载日程数据
   Future<void> _loadSchedules() async {
-    setState(() {
-      _isLoading = true;
-    });
-
     try {
       List<Schedule> schedules = [];
-      
+
       // 使用 Repository 按月加载（启用缓存）
       final year = _focusedDay.year;
       final month = _focusedDay.month;
@@ -92,14 +197,15 @@ class _CalendarPageState extends State<CalendarPage> {
         year: year,
         month: month,
       );
-      
+
       final currentUser = await AuthService().getProfile();
       schedules = monthSchedules.where((s) => s.type != 'daily').toList();
 
       // 如果启用在日历显示日常任务，加载日常数据
       if (currentUser.config.dailyScheduleDisplayInCalendar == true) {
         try {
-          await _dailyTaskService.getDailyTasks(status: 'active');
+          final tasks = await _dailyTaskService.getDailyTasks(status: 'active');
+          _dailyTasks = tasks;
         } catch (e) {
           debugPrint('加载日常任务失败: $e');
         }
@@ -107,12 +213,15 @@ class _CalendarPageState extends State<CalendarPage> {
 
       setState(() {
         _scheduleMap = _buildScheduleMap(schedules);
-        _isLoading = false;
       });
+
+      // 解决首屏命中缓存但不渲染的问题：
+      // 主动触发一次与“手动切换日期”相同的刷新路径，确保列表和标记立即更新。
+      if (_selectedDay != null) {
+        _onDaySelected(_selectedDay!, _focusedDay);
+      }
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
+      // 加载失败不设置状态，保持现有数据
     }
   }
 
@@ -307,6 +416,19 @@ class _CalendarPageState extends State<CalendarPage> {
     );
   }
 
+  // 显示日常任务详情
+  void _showDailyTaskDetails(DailyTask task) {
+    // 暂时显示简单提示，未来可以实现完整的详情页
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '${task.title}\n状态: ${task.status == 'active' ? '活跃' : '暂停'}',
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   // 创建日程
   Future<void> _handleCreate(Schedule schedule) async {
     try {
@@ -414,19 +536,22 @@ class _CalendarPageState extends State<CalendarPage> {
   }
 
   // 删除重复日程模板
-  Future<void> _handleDeleteSeries(String templateId, String strategy) async {
+  Future<void> _handleDeleteSeries(
+    String parentId,
+    String deleteInstances,
+  ) async {
     try {
       await _scheduleService.deleteRecurrenceTemplate(
-        templateId,
-        strategy: strategy,
+        parentId,
+        deleteInstances: deleteInstances,
       );
 
       // 刷新列表
       await _loadSchedules();
 
       if (mounted) {
-        final strategyText =
-            {'future': '模板+待办实例', 'all': '模板+全部实例'}[strategy] ?? '仅模板';
+        final deleteText =
+            {'future': '模板+待办实例', 'all': '模板+全部实例'}[deleteInstances] ?? '仅模板';
 
         Future.microtask(() {
           if (mounted) {
@@ -434,7 +559,7 @@ class _CalendarPageState extends State<CalendarPage> {
               ..hideCurrentSnackBar()
               ..showSnackBar(
                 SnackBar(
-                  content: Text('已删除：$strategyText'),
+                  content: Text('已删除：$deleteText'),
                   duration: const Duration(seconds: 2),
                   behavior: SnackBarBehavior.floating,
                 ),
@@ -506,6 +631,12 @@ class _CalendarPageState extends State<CalendarPage> {
       appBar: AppBar(
         title: const Text('日历'),
         actions: [
+          // 同步状态指示器
+          if (_isSyncing)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: SyncIndicator(isSyncing: true, size: 20),
+            ),
           TextButton(
             onPressed: _jumpToToday,
             child: const Text(
@@ -516,33 +647,49 @@ class _CalendarPageState extends State<CalendarPage> {
           IconButton(icon: const Icon(Icons.add), onPressed: _showCreateDialog),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : CustomScrollView(
-              slivers: [
-                // 1. 核心：可跟随手指收缩的日历头部
-                SliverPersistentHeader(
-                  pinned: true, // 关键：收缩后固定在顶部
-                  delegate: _CalendarHeaderDelegate(
-                    focusedDay: _focusedDay,
-                    selectedDay: _selectedDay,
-                    onDaySelected: _onDaySelected,
-                    onPageChanged: (focusedDay) {
-                      setState(() {
-                        _focusedDay = focusedDay;
-                      });
-                    },
-                    eventLoader: _getSchedulesForDay,
+      body: Column(
+        children: [
+          // 离线状态横幅
+          OfflineBanner(showPendingCount: true, pendingCount: _pendingCount),
+          // 主体内容
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _handlePullToRefresh,
+              child: CustomScrollView(
+                slivers: [
+                  // 1. 核心：可跟随手指收缩的日历头部
+                  SliverPersistentHeader(
+                    pinned: true, // 关键：收缩后固定在顶部
+                    delegate: _CalendarHeaderDelegate(
+                      focusedDay: _focusedDay,
+                      selectedDay: _selectedDay,
+                      onDaySelected: _onDaySelected,
+                      onPageChanged: (focusedDay) {
+                        setState(() {
+                          _focusedDay = focusedDay;
+                        });
+                      },
+                      eventLoader: _getSchedulesForDay,
+                    ),
                   ),
-                ),
 
-                // 2. 日程列表
-                _buildScheduleList(),
+                  // 2. 日程列表
+                  _buildScheduleList(),
 
-                // 底部安全距离
-                const SliverPadding(padding: EdgeInsets.only(bottom: 40)),
-              ],
+                  // 底部安全距离
+                  const SliverPadding(padding: EdgeInsets.only(bottom: 40)),
+                ],
+              ),
             ),
+          ),
+        ],
+      ),
+      // 浮动同步按钮
+      floatingActionButton: FloatingSyncButton(
+        isSyncing: _isSyncing,
+        pendingCount: _pendingCount,
+        onTap: _triggerManualSync,
+      ),
     );
   }
 
@@ -764,6 +911,29 @@ class _CalendarPageState extends State<CalendarPage> {
             ],
           ),
         ),
+
+        // 日常任务卡片（若启用）
+        if (_showDailyTasksInCalendar && _dailyTasks.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Text('今日日常', style: TextStyle(color: Colors.grey[700])),
+          ),
+          ..._dailyTasks.map(
+            (task) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: DailyTaskCard(
+                task: task,
+                use24HourFormat: _use24HourFormat,
+                onTaskUpdated: (_) async {
+                  // 更新后刷新数据
+                  await _loadSchedules();
+                },
+                onDetailsTap: () => _showDailyTaskDetails(task),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
 
         // 日程卡片列表
         ...schedules.map((schedule) {

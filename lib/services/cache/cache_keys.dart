@@ -36,11 +36,11 @@ class CacheKeys {
   /// 会话消息列表缓存键前缀（需拼接会话 ID）
   static const String conversationMessages = 'conversation_messages_';
 
-  /// 会话列表缓存过期时间: 5分钟
-  static const Duration conversationsCacheMaxAge = Duration(minutes: 5);
+  /// 会话列表缓存过期时间: 3天
+  static const Duration conversationsCacheMaxAge = Duration(days: 3);
 
-  /// 会话详情缓存过期时间: 10分钟
-  static const Duration conversationDetailCacheMaxAge = Duration(minutes: 10);
+  /// 会话详情缓存过期时间: 3天（保持与列表一致，便于离线访问）
+  static const Duration conversationDetailCacheMaxAge = Duration(days: 3);
 
   // ==================== 用户相关 ====================
 

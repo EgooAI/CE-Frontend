@@ -40,7 +40,6 @@ class _DailyTaskCardState extends State<DailyTaskCard> {
   bool _submittedInSession = false;
   final FocusNode _titleFocus = FocusNode();
   final DailyTaskService _dailyTaskService = DailyTaskService();
-  late String _status;
   String? _colorHex;
 
   Color? _colorFromHex(String? hex) {
@@ -74,7 +73,6 @@ class _DailyTaskCardState extends State<DailyTaskCard> {
     _titleController = TextEditingController(text: widget.task.title);
     _isEditing = widget.autoFocus;
     _submittedInSession = false;
-    _status = widget.task.status;
     _colorHex = widget.task.color;
     _titleFocus.addListener(() {
       if (!_titleFocus.hasFocus) {
@@ -88,9 +86,6 @@ class _DailyTaskCardState extends State<DailyTaskCard> {
     super.didUpdateWidget(oldWidget);
     if (!_isEditing && oldWidget.task.title != widget.task.title) {
       _titleController.text = widget.task.title;
-    }
-    if (oldWidget.task.status != widget.task.status) {
-      _status = widget.task.status;
     }
     if (oldWidget.task.color != widget.task.color) {
       _colorHex = widget.task.color;
@@ -136,34 +131,211 @@ class _DailyTaskCardState extends State<DailyTaskCard> {
     widget.onFinishEditing?.call();
   }
 
-  Future<void> _toggleStatus(bool? checked) async {
-    final newStatus = (checked ?? false) ? 'paused' : 'active';
-    final prev = _status;
-    setState(() {
-      _status = newStatus;
-    });
+  Future<void> _toggleCheckIn(bool? checked) async {
+    final newChecked = checked ?? false;
+    final prevCompleted = widget.task.todayCompleted ?? false;
+
+    try {
+      if (newChecked) {
+        // 打卡：无 note 的快速打卡
+        await _dailyTaskService.logDailyTask(
+          widget.task.id,
+          completed: true,
+          note: '',
+        );
+        // 更新任务状态
+        final updatedTask = widget.task.copyWith(todayCompleted: true);
+        widget.onTaskUpdated?.call(updatedTask);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✓ 打卡成功'),
+              duration: Duration(seconds: 1),
+            ),
+          );
+        }
+      } else {
+        // 取消打卡
+        await _dailyTaskService.cancelTodayLog(widget.task.id);
+        // 更新任务状态
+        final updatedTask = widget.task.copyWith(todayCompleted: false);
+        widget.onTaskUpdated?.call(updatedTask);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✓ 已取消打卡'),
+              duration: Duration(seconds: 1),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+      // 恢复之前的状态
+      final revertTask = widget.task.copyWith(todayCompleted: prevCompleted);
+      widget.onTaskUpdated?.call(revertTask);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('操作失败: $e')));
+    }
+  }
+
+  Future<void> _showSummaryDrawer() async {
+    // 加载今日打卡记录
+    DailyTaskLog? todayLog;
+    try {
+      final logs = await _dailyTaskService.getDailyTaskLogs(
+        widget.task.id,
+        days: 1,
+      );
+      if (logs.isNotEmpty) {
+        final today = DateTime.now();
+        todayLog =
+            logs.firstWhere(
+                  (log) =>
+                      log.date.year == today.year &&
+                      log.date.month == today.month &&
+                      log.date.day == today.day,
+                  orElse: () => null as dynamic,
+                )
+                as DailyTaskLog?;
+      }
+    } catch (e) {
+      // 加载失败，继续显示drawer
+      debugPrint('Failed to load today logs: $e');
+    }
+
+    final TextEditingController noteController = TextEditingController();
+    if (todayLog != null &&
+        todayLog.note != null &&
+        todayLog.note!.isNotEmpty) {
+      noteController.text = todayLog.note!;
+    }
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+            left: 16,
+            right: 16,
+            top: 16,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                todayLog != null ? '修改总结' : '添加总结',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              if (todayLog != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Text(
+                    '已打卡',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: noteController,
+                autofocus: true,
+                maxLines: 4,
+                decoration: InputDecoration(
+                  hintText: '今天完成得怎么样？',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  contentPadding: const EdgeInsets.all(12),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('取消'),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: () async {
+                      final note = noteController.text.trim();
+                      Navigator.pop(context); // 先关闭 drawer
+
+                      try {
+                        // 打卡（带总结）
+                        await _dailyTaskService.logDailyTask(
+                          widget.task.id,
+                          completed: true,
+                          note: note,
+                        );
+                        // 更新任务状态
+                        final updatedTask = widget.task.copyWith(
+                          todayCompleted: true,
+                        );
+                        widget.onTaskUpdated?.call(updatedTask);
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                todayLog != null ? '✓ 已更新总结' : '✓ 打卡成功（已添加总结）',
+                              ),
+                              duration: const Duration(seconds: 2),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(
+                          context,
+                        ).showSnackBar(SnackBar(content: Text('打卡失败: $e')));
+                      }
+                    },
+                    child: const Text('确认'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // 取消编辑不再需要显式按钮，保留逻辑以便未来可能调用
+
+  Future<void> _toggleTaskStatus() async {
+    final newStatus = widget.task.status == 'active' ? 'paused' : 'active';
+    final statusText = newStatus == 'active' ? '活跃' : '暂停';
+
     try {
       final updated = await _dailyTaskService.toggleDailyTaskStatus(
         widget.task.id,
         newStatus,
       );
       if (!mounted) return;
-      setState(() {
-        _status = updated.status;
-      });
       widget.onTaskUpdated?.call(updated);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('已切换到$statusText状态'),
+          duration: const Duration(seconds: 1),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _status = prev;
-      });
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('更新状态失败: $e')));
+      ).showSnackBar(SnackBar(content: Text('状态切换失败: $e')));
     }
   }
-
-  // 取消编辑不再需要显式按钮，保留逻辑以便未来可能调用
 
   Future<void> _confirmDelete() async {
     final result = await showDialog<bool>(
@@ -349,8 +521,11 @@ class _DailyTaskCardState extends State<DailyTaskCard> {
                 ),
               ),
             ),
-            // 左侧：复选框（可选，用于打卡）
-            Checkbox(value: _status == 'paused', onChanged: _toggleStatus),
+            // 左侧：复选框（用于打卡）
+            Checkbox(
+              value: widget.task.todayCompleted ?? false,
+              onChanged: _toggleCheckIn,
+            ),
             const SizedBox(width: 8),
 
             // 中间：标题编辑框 / 标题文本
@@ -389,10 +564,11 @@ class _DailyTaskCardState extends State<DailyTaskCard> {
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w500,
-                                    color: _status == 'paused'
+                                    color: (widget.task.todayCompleted ?? false)
                                         ? Colors.grey[600]
                                         : Colors.black,
-                                    decoration: _status == 'paused'
+                                    decoration:
+                                        (widget.task.todayCompleted ?? false)
                                         ? TextDecoration.lineThrough
                                         : TextDecoration.none,
                                   ),
@@ -456,18 +632,6 @@ class _DailyTaskCardState extends State<DailyTaskCard> {
                       ),
                     ),
             ),
-
-            const SizedBox(width: 8),
-
-            // 编辑模式下的操作按钮
-            if (!_isEditing) ...[
-              // 详情按钮
-              IconButton(
-                icon: const Icon(Icons.info_outline),
-                onPressed: widget.onDetailsTap,
-                tooltip: '详情',
-              ),
-            ],
           ],
         ),
       ),
@@ -475,34 +639,87 @@ class _DailyTaskCardState extends State<DailyTaskCard> {
 
     final slidableCard = Slidable(
       key: Key(widget.task.id),
+      // 左滑显示"总结"按钮
+      startActionPane: ActionPane(
+        motion: const DrawerMotion(),
+        extentRatio: 0.25,
+        children: [
+          CustomSlidableAction(
+            onPressed: (_) => _showSummaryDrawer(),
+            padding: EdgeInsets.zero,
+            autoClose: true,
+            backgroundColor: Colors.blue,
+            child: const Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.edit_note, color: Colors.white, size: 24),
+                SizedBox(height: 4),
+                Text(
+                  '总结',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      // 右滑显示"状态切换"和"删除"按钮
       endActionPane: ActionPane(
         motion: const DrawerMotion(),
-        extentRatio: 0.20,
+        extentRatio: 0.40,
         children: [
+          CustomSlidableAction(
+            onPressed: (_) => _toggleTaskStatus(),
+            padding: EdgeInsets.zero,
+            autoClose: true,
+            backgroundColor: widget.task.status == 'active'
+                ? Colors.orange
+                : Colors.green,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  widget.task.status == 'active'
+                      ? Icons.pause
+                      : Icons.play_arrow,
+                  color: Colors.white,
+                  size: 24,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  widget.task.status == 'active' ? '暂停' : '激活',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
           CustomSlidableAction(
             onPressed: (_) => _confirmDelete(),
             padding: EdgeInsets.zero,
             autoClose: true,
-            child: SizedBox.expand(
-              child: Container(
-                color: Colors.red,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    Icon(Icons.delete, color: Colors.white, size: 20),
-                    SizedBox(width: 6),
-                    Text(
-                      '删除',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
+            backgroundColor: Colors.red,
+            child: const Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.delete, color: Colors.white, size: 24),
+                SizedBox(height: 4),
+                Text(
+                  '删除',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
         ],

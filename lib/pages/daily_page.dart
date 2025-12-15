@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'package:get_it/get_it.dart';
 import '../models/daily_task.dart';
-import '../services/daily_task_service.dart';
+import '../repositories/daily_task_repository.dart';
 import '../services/auth_service.dart';
+import '../services/sync_queue_service.dart';
 import '../widgets/daily_task_card.dart';
+import '../widgets/offline_banner.dart';
+import '../widgets/sync_indicator.dart';
 
 /// 日常任务页面 - 主页面
 class DailyPage extends StatefulWidget {
@@ -14,18 +18,60 @@ class DailyPage extends StatefulWidget {
 }
 
 class _DailyPageState extends State<DailyPage> {
-  final DailyTaskService _dailyTaskService = DailyTaskService();
+  final DailyTaskRepository _dailyTaskRepository = DailyTaskRepository();
+  final _syncQueue = GetIt.instance<SyncQueueService>();
   bool _use24HourFormat = true;
   List<DailyTask> _tasks = [];
-  bool _isLoading = true;
   String? _errorMessage;
   String? _autoFocusTaskId;
+  bool _isSyncing = false;
+  // 日常任务状态过滤器：'active' 或 'paused'
+  String _dailyTaskStatusFilter = 'active';
+  int _pendingCount = 0;
 
   @override
   void initState() {
     super.initState();
     _loadTasks();
     _loadConfig();
+    _listenToPendingCount();
+  }
+
+  /// 监听待同步任务数量
+  void _listenToPendingCount() {
+    _syncQueue.pendingCountStream.listen((count) {
+      if (mounted) {
+        setState(() {
+          _pendingCount = count;
+        });
+      }
+    });
+  }
+
+  /// 下拉刷新（强制从 API 获取最新数据）
+  Future<void> _handlePullToRefresh() async {
+    try {
+      // 使用 refreshDailyTasks 强制刷新，忽略缓存
+      final tasks = await _dailyTaskRepository.refreshDailyTasks(
+        status: _dailyTaskStatusFilter,
+      );
+
+      if (mounted) {
+        setState(() {
+          _tasks = tasks;
+          _errorMessage = null;
+        });
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('刷新成功')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('刷新失败: $e')));
+      }
+    }
   }
 
   // 公开的刷新方法，供外部调用（MainPage 调用）
@@ -44,20 +90,19 @@ class _DailyPageState extends State<DailyPage> {
   /// 加载日常任务列表
   Future<void> _loadTasks() async {
     setState(() {
-      _isLoading = true;
       _errorMessage = null;
     });
 
     try {
-      final tasks = await _dailyTaskService.getDailyTasks();
+      final tasks = await _dailyTaskRepository.getDailyTasks(
+        status: _dailyTaskStatusFilter,
+      );
       setState(() {
         _tasks = tasks;
-        _isLoading = false;
       });
     } catch (e) {
       setState(() {
         _errorMessage = e.toString().replaceAll('Exception: ', '');
-        _isLoading = false;
       });
     }
   }
@@ -77,7 +122,7 @@ class _DailyPageState extends State<DailyPage> {
   /// 创建新日常任务
   Future<void> _createNewTask() async {
     try {
-      final newTask = await _dailyTaskService.createDailyTask();
+      final newTask = await _dailyTaskRepository.createDailyTask();
       setState(() {
         _autoFocusTaskId = newTask.id;
       });
@@ -92,7 +137,7 @@ class _DailyPageState extends State<DailyPage> {
   /// 更新任务标题
   Future<void> _updateTaskTitle(String taskId, String newTitle) async {
     try {
-      final updatedTask = await _dailyTaskService.updateDailyTask(
+      final updatedTask = await _dailyTaskRepository.updateDailyTask(
         taskId,
         title: newTitle,
       );
@@ -136,7 +181,7 @@ class _DailyPageState extends State<DailyPage> {
     if (confirmed != true) return;
 
     try {
-      await _dailyTaskService.deleteDailyTask(taskId);
+      await _dailyTaskRepository.deleteDailyTask(taskId);
       setState(() {
         _tasks.removeWhere((t) => t.id == taskId);
       });
@@ -175,29 +220,86 @@ class _DailyPageState extends State<DailyPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('我的日常'),
+        title: Row(
+          children: [
+            const Text('我的日常'),
+            const SizedBox(width: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.9),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _dailyTaskStatusFilter,
+                  isDense: true,
+                  style: TextStyle(color: Colors.grey[800], fontSize: 13),
+                  icon: Icon(
+                    Icons.arrow_drop_down,
+                    color: Colors.grey[700],
+                    size: 20,
+                  ),
+                  items: [
+                    DropdownMenuItem(
+                      value: 'active',
+                      child: Text(
+                        '活跃',
+                        style: TextStyle(color: Colors.grey[800]),
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'paused',
+                      child: Text(
+                        '暂停',
+                        style: TextStyle(color: Colors.grey[800]),
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null && value != _dailyTaskStatusFilter) {
+                      setState(() {
+                        _dailyTaskStatusFilter = value;
+                      });
+                      _loadTasks();
+                    }
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
         actions: [
+          // 同步状态指示器
+          if (_isSyncing)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: SyncIndicator(isSyncing: true, size: 20),
+            ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadTasks,
+            onPressed: _handlePullToRefresh,
             tooltip: '刷新',
           ),
         ],
       ),
-      body: _buildBody(),
+      body: Column(
+        children: [
+          // 离线状态横幅
+          OfflineBanner(showPendingCount: true, pendingCount: _pendingCount),
+          // 主体内容
+          Expanded(child: _buildBody()),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: _createNewTask,
-        tooltip: '新增日常',
         child: const Icon(Icons.add),
+        tooltip: '新增任务',
       ),
     );
   }
 
   Widget _buildBody() {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
     if (_errorMessage != null) {
       return Center(
         child: Column(
@@ -222,27 +324,41 @@ class _DailyPageState extends State<DailyPage> {
     }
 
     if (_tasks.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+      return RefreshIndicator(
+        onRefresh: _handlePullToRefresh,
+        child: ListView(
           children: [
-            Icon(Icons.today, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            Text(
-              '暂无日常任务',
-              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _createNewTask,
-              icon: const Icon(Icons.add),
-              label: const Text('新增日常'),
+            Container(
+              padding: const EdgeInsets.all(48),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.task_alt, size: 80, color: Colors.grey[300]),
+                  const SizedBox(height: 16),
+                  Text(
+                    '还没有日常任务',
+                    style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '点击 + 号创建第一个任务吧',
+                    style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
       );
     }
 
+    return RefreshIndicator(
+      onRefresh: _handlePullToRefresh,
+      child: ListView(children: _buildTaskGroups()),
+    );
+  }
+
+  List<Widget> _buildTaskGroups() {
     final uncategorized = _tasks
         .where((t) => t.category == null || t.category!.trim().isEmpty)
         .toList();
@@ -268,7 +384,7 @@ class _DailyPageState extends State<DailyPage> {
       items.addAll(grouped[cat]!.map(_buildTaskItem));
     }
 
-    return ListView(children: items);
+    return items;
   }
 
   Widget _buildSectionHeader(String title) {
@@ -293,13 +409,26 @@ class _DailyPageState extends State<DailyPage> {
       onTitleChanged: (newTitle) => _updateTaskTitle(task.id, newTitle),
       onDelete: () => _deleteTask(task.id),
       onDetailsTap: () => _showTaskDetailsDrawer(task),
-      onTaskUpdated: (updated) {
-        setState(() {
-          final idx = _tasks.indexWhere((t) => t.id == updated.id);
-          if (idx != -1) {
-            _tasks[idx] = updated;
-          }
-        });
+      onTaskUpdated: (updated) async {
+        // 任务更新后，先更新本地状态，然后刷新缓存
+        // 如果切换了active/paused状态，任务可能不再符合过滤条件
+        if (updated.status != _dailyTaskStatusFilter) {
+          // 状态不匹配，从列表移除
+          setState(() {
+            _tasks.removeWhere((t) => t.id == updated.id);
+          });
+        } else {
+          // 状态匹配，更新本地任务
+          setState(() {
+            final idx = _tasks.indexWhere((t) => t.id == updated.id);
+            if (idx != -1) {
+              _tasks[idx] = updated;
+            }
+          });
+        }
+
+        // 后台刷新缓存，确保下次加载时数据是最新的
+        _dailyTaskRepository.refreshDailyTasks(status: _dailyTaskStatusFilter);
       },
       onFinishEditing: () {
         if (_autoFocusTaskId == task.id) {
@@ -331,7 +460,6 @@ class DailyTaskDetailsDrawer extends StatefulWidget {
 }
 
 class _DailyTaskDetailsDrawerState extends State<DailyTaskDetailsDrawer> {
-  final DailyTaskService _dailyTaskService = DailyTaskService();
   late TextEditingController _titleController;
   late TextEditingController _descriptionController;
   late TextEditingController _categoryController;
@@ -416,7 +544,8 @@ class _DailyTaskDetailsDrawerState extends State<DailyTaskDetailsDrawer> {
         );
       }
 
-      final updatedTask = await _dailyTaskService.updateDailyTask(
+      final repository = GetIt.instance<DailyTaskRepository>();
+      final updatedTask = await repository.updateDailyTask(
         widget.task.id,
         title: newTitle,
         description: _descriptionController.text.trim().isEmpty

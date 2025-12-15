@@ -56,19 +56,45 @@ class ScheduleService {
     }
   }
 
-  // 删除重复日程模板
-  // strategy: none(默认) | future | all
+  // 删除重复日程模板（系列）
+  // deleteInstances: none(默认) | future | all
+  // - none: 只删模板，保留已生成的实例
+  // - future: 删模板和未来的实例
+  // - all: 删模板和所有实例
   Future<void> deleteRecurrenceTemplate(
-    String templateId, {
-    String strategy = 'none',
+    String parentId, {
+    String deleteInstances = 'none',
   }) async {
     try {
       await ApiClient.instance.delete(
-        '/schedules/templates/$templateId',
-        queryParameters: {'strategy': strategy},
+        '/schedules/series/$parentId',
+        queryParameters: {'deleteInstances': deleteInstances},
       );
     } on DioException catch (e) {
       throw Exception(e.message ?? '删除重复日程失败');
+    }
+  }
+
+  // 更新重复日程系列
+  // strategy: future 或 all
+  // - future: 更新该实例及未来实例
+  // - all: 更新该实例及所有实例
+  Future<void> updateRecurrenceSeries(
+    String parentId,
+    Map<String, dynamic> scheduleData, {
+    String? strategy,
+  }) async {
+    try {
+      final params = strategy != null
+          ? {'strategy': strategy}
+          : <String, dynamic>{};
+      await ApiClient.instance.put(
+        '/schedules/series/$parentId',
+        data: scheduleData,
+        queryParameters: params,
+      );
+    } on DioException catch (e) {
+      throw Exception(e.message ?? '更新重复日程失败');
     }
   }
 

@@ -21,7 +21,7 @@ class CreateScheduleBottomSheet extends StatefulWidget {
   final DateTime? initialDate;
   final Schedule? existingSchedule; // 编辑模式
   final Map<String, dynamic>? initialData; // AI 预填充数据
-  final Function(Schedule) onSave;
+  final Future<void> Function(Schedule) onSave;
   final bool use24HourFormat;
 
   const CreateScheduleBottomSheet({
@@ -405,7 +405,8 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
             : null,
       );
 
-      widget.onSave(schedule);
+      // 等待外部保存逻辑完成后再关闭 Bottom Sheet，避免保存未完成即关闭导致的“没反应”体验
+      await widget.onSave(schedule);
 
       if (mounted) {
         Navigator.of(context).pop();
@@ -973,7 +974,7 @@ class AnimatedBottomSheetContent extends StatelessWidget {
   final DateTime? initialDate;
   final Schedule? existingSchedule;
   final Map<String, dynamic>? initialData;
-  final Function(Schedule) onSave;
+  final Future<void> Function(Schedule) onSave;
   final bool use24HourFormat;
 
   const AnimatedBottomSheetContent({
@@ -1009,7 +1010,7 @@ void showCreateScheduleBottomSheet(
   DateTime? initialDate,
   Schedule? existingSchedule,
   Map<String, dynamic>? initialData,
-  required Function(Schedule) onSave,
+  required Future<void> Function(Schedule) onSave,
   bool use24HourFormat = true,
 }) {
   showModalBottomSheet(

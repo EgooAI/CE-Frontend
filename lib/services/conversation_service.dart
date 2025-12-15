@@ -203,6 +203,93 @@ class ConversationService {
       }
     }
   }
+
+  /// 根据内容生成对话标题
+  ///
+  /// 调用 AI 服务自动生成简短、准确的会话标题
+  ///
+  /// 参数：
+  ///   - content: 用于生成标题的文本内容（建议 10-500 字符）
+  ///
+  /// 返回：生成的标题文本
+  ///
+  /// 异常：如果请求失败会抛出 Exception
+  Future<String> generateTitle(String content) async {
+    try {
+      if (content.trim().isEmpty) {
+        throw Exception('内容不能为空');
+      }
+
+      final response = await ApiClient.instance.post(
+        '/conversations/generate-title',
+        data: {'content': content},
+      );
+
+      if (response.data == null || response.data is! Map) {
+        throw Exception('服务器返回数据格式错误');
+      }
+
+      final Map<String, dynamic> data = response.data as Map<String, dynamic>;
+      print('[GenerateTitle] 📥 API 响应 (拦截器已提取 data): $data');
+
+      // 拦截器已经提取了原始响应中的 data 字段，直接获取 title
+      final title = data['title'] as String?;
+      print('[GenerateTitle] 📝 提取的标题: $title');
+
+      if (title == null || title.isEmpty) {
+        throw Exception('生成标题为空');
+      }
+
+      print('[GenerateTitle] ✅ 标题提取成功: $title');
+      return title;
+    } on DioException catch (e) {
+      print('[GenerateTitle] 📡 DioException: ${e.message}');
+      print('[GenerateTitle] 📡 状态码: ${e.response?.statusCode}');
+      print('[GenerateTitle] 📡 响应体: ${e.response?.data}');
+      throw Exception(e.message ?? 'Failed to generate title');
+    } catch (e) {
+      print('[GenerateTitle] ❌ 异常: $e');
+      rethrow;
+    }
+  }
+
+  /// 搜索会话
+  ///
+  /// [keyword] 搜索关键词
+  /// 返回匹配的会话列表
+  Future<List<Conversation>> searchConversations(String keyword) async {
+    try {
+      print('[SearchConversations] 🔍 开始搜索: $keyword');
+
+      final response = await ApiClient.instance.get(
+        '/conversations/search',
+        queryParameters: {'q': keyword},
+      );
+
+      if (response.data == null) {
+        print('[SearchConversations] ⚠️ 响应数据为空');
+        return [];
+      }
+
+      if (response.data is! List) {
+        print(
+          '[SearchConversations] ⚠️ 响应数据类型错误: ${response.data.runtimeType}',
+        );
+        return [];
+      }
+
+      final List<dynamic> results = response.data;
+      print('[SearchConversations] ✅ 搜索成功，找到 ${results.length} 个结果');
+
+      return results.map((e) => Conversation.fromJson(e)).toList();
+    } on DioException catch (e) {
+      print('[SearchConversations] ❌ 搜索失败: ${e.message}');
+      throw Exception(e.message ?? '搜索会话失败');
+    } catch (e) {
+      print('[SearchConversations] ❌ 异常: $e');
+      rethrow;
+    }
+  }
 }
 
 class StreamEvent {
