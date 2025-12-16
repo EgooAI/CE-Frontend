@@ -32,8 +32,18 @@ class _RemindersPageState extends State<RemindersPage> {
 
     try {
       final response = await _reminderService.getReminders();
+
+      // 按照提醒时间距离当前时间升序排序（最接近当前时间的排在前面）
+      final now = DateTime.now();
+      final sortedReminders = response.reminders
+        ..sort((a, b) {
+          final diffA = a.remindAt.difference(now).abs();
+          final diffB = b.remindAt.difference(now).abs();
+          return diffA.compareTo(diffB);
+        });
+
       setState(() {
-        _reminders = response.reminders;
+        _reminders = sortedReminders;
         _total = response.total;
         _isLoading = false;
       });

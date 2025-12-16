@@ -438,6 +438,7 @@ class _DailyPageState extends State<DailyPage> {
         }
       },
       use24HourFormat: _use24HourFormat,
+      showInfo: true,
     );
   }
 }

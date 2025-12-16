@@ -103,7 +103,7 @@ class _DailyRecordDetailPageState extends State<DailyRecordDetailPage> {
 
   Widget _buildHeaderCard(DailyTaskStats? stats) {
     return Container(
-      margin: const EdgeInsets.all(16),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -213,7 +213,7 @@ class _DailyRecordDetailPageState extends State<DailyRecordDetailPage> {
         }
 
         return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16),
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: Colors.white,
@@ -285,7 +285,7 @@ class _DailyRecordDetailPageState extends State<DailyRecordDetailPage> {
         }
 
         return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: Colors.orange[50],
@@ -360,7 +360,7 @@ class _DailyRecordDetailPageState extends State<DailyRecordDetailPage> {
           ..sort((a, b) => b.date.compareTo(a.date));
 
         return Container(
-          margin: const EdgeInsets.all(16),
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: Colors.white,
@@ -518,12 +518,19 @@ class _BuildLogGrid extends StatelessWidget {
       days.add((date, completed));
     }
 
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: days.map((item) {
-        final date = item.$1;
-        final completed = item.$2;
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 6, // 6列
+        crossAxisSpacing: 6,
+        mainAxisSpacing: 6,
+        childAspectRatio: 1, // 正方形格子
+      ),
+      itemCount: days.length,
+      itemBuilder: (context, index) {
+        final date = days[index].$1;
+        final completed = days[index].$2;
         final isToday =
             date.year == now.year &&
             date.month == now.month &&
@@ -532,8 +539,6 @@ class _BuildLogGrid extends StatelessWidget {
         return Tooltip(
           message: '${date.month}月${date.day}日${completed ? '✓ 已完成' : '未完成'}',
           child: Container(
-            width: 36,
-            height: 36,
             decoration: BoxDecoration(
               color: completed ? Colors.green[400] : Colors.grey[300],
               border: isToday ? Border.all(color: Colors.blue, width: 2) : null,
@@ -551,7 +556,7 @@ class _BuildLogGrid extends StatelessWidget {
             ),
           ),
         );
-      }).toList(),
+      },
     );
   }
 }

@@ -26,6 +26,21 @@ class CalendarPage extends StatefulWidget {
 }
 
 class _CalendarPageState extends State<CalendarPage> {
+  // 用于追踪数据更新，确保 TableCalendar 在数据变化时重建
+  int _scheduleUpdateCount = 0;
+
+  // 判断当前选中日期是否为今天
+  bool _isTodaySelected() {
+    final now = DateTime.now();
+    if (_selectedDay == null) return false;
+    return _isSameDay(_selectedDay!, now);
+  }
+
+  // 判断两个日期是否为同一天（忽略时分秒）
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
   final _scheduleRepository = ScheduleRepository();
   final _dailyTaskService = DailyTaskService();
   // 用于特殊操作（如删除重复模板）的 Service 直接引用
@@ -201,19 +216,25 @@ class _CalendarPageState extends State<CalendarPage> {
       final currentUser = await AuthService().getProfile();
       schedules = monthSchedules.where((s) => s.type != 'daily').toList();
 
+      List<DailyTask> loadedDailyTasks = [];
       // 如果启用在日历显示日常任务，加载日常数据
       if (currentUser.config.dailyScheduleDisplayInCalendar == true) {
         try {
-          final tasks = await _dailyTaskService.getDailyTasks(status: 'active');
-          _dailyTasks = tasks;
+          loadedDailyTasks = await _dailyTaskService.getDailyTasks(
+            status: 'active',
+          );
         } catch (e) {
           debugPrint('加载日常任务失败: $e');
         }
       }
 
-      setState(() {
-        _scheduleMap = _buildScheduleMap(schedules);
-      });
+      if (mounted) {
+        setState(() {
+          _scheduleMap = _buildScheduleMap(schedules);
+          _dailyTasks = loadedDailyTasks;
+          _scheduleUpdateCount++; // 增加数据版本计数，触发 delegate 重建
+        });
+      }
 
       // 解决首屏命中缓存但不渲染的问题：
       // 主动触发一次与“手动切换日期”相同的刷新路径，确保列表和标记立即更新。
@@ -255,6 +276,62 @@ class _CalendarPageState extends State<CalendarPage> {
   List<Schedule> _getSchedulesForDay(DateTime day) {
     final normalizedDay = DateTime(day.year, day.month, day.day);
     return _scheduleMap[normalizedDay] ?? [];
+  }
+
+  // 判断某天是否有未完成的任务（包括日程和日常任务）
+  bool _hasPendingTasks(DateTime day) {
+    final schedules = _getSchedulesForDay(day);
+
+    // 检查是否有未完成的日程
+    final hasPendingSchedule = schedules.any(
+      (s) => s.status != 'completed' && s.status != 'cancelled',
+    );
+
+    // 如果是今天且启用了日常任务显示，检查日常任务
+    if (_showDailyTasksInCalendar && _isSameDay(day, DateTime.now())) {
+      // 检查是否有未打卡的活跃日常任务（status=active 且 todayCompleted!=true）
+      final hasPendingDailyTask = _dailyTasks.any(
+        (task) => task.status == 'active' && task.todayCompleted != true,
+      );
+      return hasPendingSchedule || hasPendingDailyTask;
+    }
+
+    return hasPendingSchedule;
+  }
+
+  // 判断某天的所有任务是否都已完成
+  bool _isAllCompleted(DateTime day) {
+    final schedules = _getSchedulesForDay(day);
+
+    // 如果没有任何日程
+    if (schedules.isEmpty) {
+      // 如果是今天且启用了日常任务显示，只要日常任务都打卡了就显示绿条
+      if (_showDailyTasksInCalendar && _isSameDay(day, DateTime.now())) {
+        return _dailyTasks.isNotEmpty &&
+            _dailyTasks.every(
+              (task) => task.status != 'active' || task.todayCompleted == true,
+            );
+      }
+      return false;
+    }
+
+    // 所有日程都已完成或取消
+    final allSchedulesCompleted = schedules.every(
+      (s) => s.status == 'completed' || s.status == 'cancelled',
+    );
+
+    // 如果是今天且启用了日常任务，还需要检查日常任务
+    if (_showDailyTasksInCalendar && _isSameDay(day, DateTime.now())) {
+      // 如果有日常任务，它们也必须都打卡了（或者是暂停状态）
+      if (_dailyTasks.isNotEmpty) {
+        final allDailyTasksCompleted = _dailyTasks.every(
+          (task) => task.status != 'active' || task.todayCompleted == true,
+        );
+        return allSchedulesCompleted && allDailyTasksCompleted;
+      }
+    }
+
+    return allSchedulesCompleted;
   }
 
   // 日期选择回调
@@ -663,6 +740,7 @@ class _CalendarPageState extends State<CalendarPage> {
                     delegate: _CalendarHeaderDelegate(
                       focusedDay: _focusedDay,
                       selectedDay: _selectedDay,
+                      scheduleUpdateCount: _scheduleUpdateCount,
                       onDaySelected: _onDaySelected,
                       onPageChanged: (focusedDay) {
                         setState(() {
@@ -670,6 +748,8 @@ class _CalendarPageState extends State<CalendarPage> {
                         });
                       },
                       eventLoader: _getSchedulesForDay,
+                      hasPendingTasks: _hasPendingTasks,
+                      isAllCompleted: _isAllCompleted,
                     ),
                   ),
 
@@ -872,48 +952,57 @@ class _CalendarPageState extends State<CalendarPage> {
     }
 
     final schedules = _getSchedulesForDay(_selectedDay!);
+    final hasDailyTasks =
+        _showDailyTasksInCalendar &&
+        _dailyTasks.isNotEmpty &&
+        _isTodaySelected();
 
-    if (schedules.isEmpty) {
+    // 如果既没有日程也没有日常任务，显示空状态
+    if (schedules.isEmpty && !hasDailyTasks) {
       return SliverFillRemaining(child: _buildEmptyState());
     }
 
     return SliverList(
       delegate: SliverChildListDelegate([
-        // 列表标题
-        Container(
-          padding: const EdgeInsets.all(12),
-          color: Colors.grey[100],
-          child: Row(
-            children: [
-              Text(
-                '${_selectedDay!.year}年${_selectedDay!.month}月${_selectedDay!.day}日 的日程',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.blue,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '${schedules.length}',
+        // 列表标题（仅当有日程时显示）
+        if (schedules.isNotEmpty)
+          Container(
+            padding: const EdgeInsets.all(12),
+            color: Colors.grey[100],
+            child: Row(
+              children: [
+                Text(
+                  '${_selectedDay!.year}年${_selectedDay!.month}月${_selectedDay!.day}日 的日程',
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
+                    fontSize: 16,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.blue,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${schedules.length}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
 
         // 日常任务卡片（若启用）
-        if (_showDailyTasksInCalendar && _dailyTasks.isNotEmpty) ...[
+        if (hasDailyTasks) ...[
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Text('今日日常', style: TextStyle(color: Colors.grey[700])),
@@ -924,6 +1013,7 @@ class _CalendarPageState extends State<CalendarPage> {
               child: DailyTaskCard(
                 task: task,
                 use24HourFormat: _use24HourFormat,
+                showInfo: false,
                 onTaskUpdated: (_) async {
                   // 更新后刷新数据
                   await _loadSchedules();
@@ -935,24 +1025,25 @@ class _CalendarPageState extends State<CalendarPage> {
           const SizedBox(height: 8),
         ],
 
-        // 日程卡片列表
-        ...schedules.map((schedule) {
-          final isExpanded = _expandedScheduleIds.contains(schedule.id);
+        // 日程卡片列表（仅当有日程时显示）
+        if (schedules.isNotEmpty)
+          ...schedules.map((schedule) {
+            final isExpanded = _expandedScheduleIds.contains(schedule.id);
 
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            child: ScheduleCard(
-              schedule: schedule,
-              isExpanded: isExpanded,
-              onTap: () => _toggleScheduleExpanded(schedule.id),
-              onStatusChanged: (newStatus) =>
-                  _handleStatusChange(schedule, newStatus),
-              onEdit: () => _showEditDialog(schedule),
-              onDelete: () => _showDeleteConfirmDialog(schedule),
-              use24HourFormat: _use24HourFormat,
-            ),
-          );
-        }),
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: ScheduleCard(
+                schedule: schedule,
+                isExpanded: isExpanded,
+                onTap: () => _toggleScheduleExpanded(schedule.id),
+                onStatusChanged: (newStatus) =>
+                    _handleStatusChange(schedule, newStatus),
+                onEdit: () => _showEditDialog(schedule),
+                onDelete: () => _showDeleteConfirmDialog(schedule),
+                use24HourFormat: _use24HourFormat,
+              ),
+            );
+          }),
       ]),
     );
   }
@@ -986,16 +1077,22 @@ class _CalendarPageState extends State<CalendarPage> {
 class _CalendarHeaderDelegate extends SliverPersistentHeaderDelegate {
   final DateTime focusedDay;
   final DateTime? selectedDay;
+  final int scheduleUpdateCount;
   final Function(DateTime, DateTime) onDaySelected;
   final Function(DateTime) onPageChanged;
   final List<Schedule> Function(DateTime) eventLoader;
+  final bool Function(DateTime) hasPendingTasks;
+  final bool Function(DateTime) isAllCompleted;
 
   _CalendarHeaderDelegate({
     required this.focusedDay,
     required this.selectedDay,
+    required this.scheduleUpdateCount,
     required this.onDaySelected,
     required this.onPageChanged,
     required this.eventLoader,
+    required this.hasPendingTasks,
+    required this.isAllCompleted,
   });
 
   // 常量配置
@@ -1144,7 +1241,12 @@ class _CalendarHeaderDelegate extends SliverPersistentHeaderDelegate {
                     ),
                     calendarBuilders: CalendarBuilders(
                       markerBuilder: (context, date, events) {
-                        if (events.isNotEmpty) {
+                        // 检查是否有未完成的任务
+                        final hasPending = hasPendingTasks(date);
+                        final allCompleted = isAllCompleted(date);
+
+                        // 优先显示红点（有未完成任务）
+                        if (hasPending) {
                           return Positioned(
                             bottom: 1,
                             child: Container(
@@ -1157,6 +1259,22 @@ class _CalendarHeaderDelegate extends SliverPersistentHeaderDelegate {
                             ),
                           );
                         }
+
+                        // 如果所有任务都完成，显示绿色线
+                        if (allCompleted) {
+                          return Positioned(
+                            bottom: 1,
+                            child: Container(
+                              width: 20,
+                              height: 3,
+                              decoration: BoxDecoration(
+                                color: Colors.green.withOpacity(0.6),
+                                borderRadius: BorderRadius.circular(1.5),
+                              ),
+                            ),
+                          );
+                        }
+
                         return null;
                       },
                     ),
@@ -1198,6 +1316,7 @@ class _CalendarHeaderDelegate extends SliverPersistentHeaderDelegate {
   @override
   bool shouldRebuild(covariant _CalendarHeaderDelegate oldDelegate) {
     return oldDelegate.focusedDay != focusedDay ||
-        oldDelegate.selectedDay != selectedDay;
+        oldDelegate.selectedDay != selectedDay ||
+        oldDelegate.scheduleUpdateCount != scheduleUpdateCount;
   }
 }

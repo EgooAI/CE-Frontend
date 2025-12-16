@@ -1450,6 +1450,8 @@ class _ChatPageState extends State<ChatPage> {
       }
 
       return ListView.builder(
+        padding: EdgeInsets.zero,
+        clipBehavior: Clip.hardEdge,
         itemCount: _searchResults.length,
         itemBuilder: (context, index) {
           final conversation = _searchResults[index];
@@ -1460,6 +1462,8 @@ class _ChatPageState extends State<ChatPage> {
 
     // 正常显示全部会话
     return ListView.builder(
+      padding: EdgeInsets.all(8.0),
+      clipBehavior: Clip.hardEdge,
       itemCount: _conversations.length,
       itemBuilder: (context, index) {
         final conversation = _conversations[index];
@@ -1576,73 +1580,74 @@ class _ChatPageState extends State<ChatPage> {
         ),
         child: Column(
           children: [
-            // UserAccountsDrawerHeader(
-            //   accountName: const Text("我的对话"),
-            //   accountEmail: null,
-            //   currentAccountPicture: const CircleAvatar(
-            //     child: Icon(Icons.chat),
-            //   ),
-            // ),
+            // Status bar 背景填充
             Container(
+              height: MediaQuery.of(context).viewPadding.top,
               color: Colors.grey[100],
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(height: 32.0),
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: TextField(
-                      controller: _searchController,
-                      decoration: InputDecoration(
-                        hintText: '搜索会话标题...',
-                        prefixIcon: const Icon(
-                          Icons.search,
-                          color: Colors.grey,
-                        ),
-                        suffixIcon: _searchController.text.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear, size: 20),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  _clearSearch();
-                                },
-                              )
-                            : null,
-                        filled: true,
-                        fillColor: Colors.white,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: Colors.grey[400]!),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: Colors.grey[400]!),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(
-                            color: Colors.blue,
-                            width: 2,
+            ),
+            SafeArea(
+              bottom: false,
+              top: false,
+              child: Container(
+                color: Colors.grey[100],
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: TextField(
+                        controller: _searchController,
+                        decoration: InputDecoration(
+                          hintText: '搜索会话标题...',
+                          prefixIcon: const Icon(
+                            Icons.search,
+                            color: Colors.grey,
+                          ),
+                          suffixIcon: _searchController.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 20),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    _clearSearch();
+                                  },
+                                )
+                              : null,
+                          filled: true,
+                          fillColor: Colors.white,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: Colors.grey[400]!),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: Colors.grey[400]!),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Colors.blue,
+                              width: 2,
+                            ),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
                           ),
                         ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
+                        onSubmitted: (_) => _performSearch(),
                       ),
-                      onSubmitted: (_) => _performSearch(),
                     ),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.add),
-                    title: const Text('新建对话'),
-                    onTap: () => _createNewConversation(closeDrawer: true),
-                  ),
-                  const Divider(height: 1),
-                ],
+                    ListTile(
+                      leading: const Icon(Icons.add),
+                      title: const Text('新建对话'),
+                      onTap: () => _createNewConversation(closeDrawer: true),
+                    ),
+                    const Divider(height: 1),
+                  ],
+                ),
               ),
             ),
-            Expanded(child: _buildConversationList()),
+            Expanded(child: ClipRect(child: _buildConversationList())),
           ],
         ),
       ),

@@ -16,6 +16,7 @@ class DailyTaskCard extends StatefulWidget {
   final bool autoFocus;
   final Function(String?)? onColorChanged;
   final bool use24HourFormat;
+  final bool showInfo;
 
   const DailyTaskCard({
     super.key,
@@ -28,6 +29,7 @@ class DailyTaskCard extends StatefulWidget {
     this.autoFocus = false,
     this.onColorChanged,
     this.use24HourFormat = true,
+    this.showInfo = false,
   });
 
   @override
@@ -554,27 +556,19 @@ class _DailyTaskCardState extends State<DailyTaskCard> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  widget.task.title,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
-                                    color: (widget.task.todayCompleted ?? false)
-                                        ? Colors.grey[600]
-                                        : Colors.black,
-                                    decoration:
-                                        (widget.task.todayCompleted ?? false)
-                                        ? TextDecoration.lineThrough
-                                        : TextDecoration.none,
-                                  ),
-                                ),
-                              ),
-                            ],
+                          Text(
+                            widget.task.title,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                              color: (widget.task.todayCompleted ?? false)
+                                  ? Colors.grey[600]
+                                  : Colors.black,
+                              decoration: (widget.task.todayCompleted ?? false)
+                                  ? TextDecoration.lineThrough
+                                  : TextDecoration.none,
+                            ),
                           ),
                           const SizedBox(height: 2),
                           if (widget.task.startTime != null ||
@@ -632,6 +626,19 @@ class _DailyTaskCardState extends State<DailyTaskCard> {
                       ),
                     ),
             ),
+            // 右端 info 按钮
+            if (widget.showInfo) ...[
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(
+                  Icons.info_outline,
+                  size: 20,
+                  color: Colors.blueGrey,
+                ),
+                tooltip: '详情',
+                onPressed: widget.onDetailsTap,
+              ),
+            ],
           ],
         ),
       ),

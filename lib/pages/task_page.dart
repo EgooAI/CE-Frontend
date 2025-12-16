@@ -9,6 +9,7 @@ import '../widgets/schedule_card.dart';
 import '../widgets/create_schedule_bottom_sheet.dart';
 import '../widgets/offline_banner.dart';
 import '../widgets/sync_indicator.dart';
+import 'main_page.dart';
 
 /// 任务页面：所有日程的集中显示管理
 class TaskPage extends StatefulWidget {
@@ -347,9 +348,22 @@ class _TaskPageState extends State<TaskPage>
         );
 
         if (shouldNavigate == true && mounted) {
-          // 切换到日历 tab (index = 0)
-          if (context.mounted) {
-            DefaultTabController.of(context).animateTo(0);
+          // 切换到日历页面并跳转到任务日期
+          try {
+            if (context.mounted) {
+              // 向上查找 MainPage 的 State 并调用 navigateToScheduleDate
+              final mainPageState = context
+                  .findAncestorStateOfType<State<MainPage>>();
+              if (mainPageState != null) {
+                (mainPageState as dynamic).navigateToScheduleDate(
+                  task.startTime,
+                );
+              } else {
+                debugPrint('无法找到 MainPage');
+              }
+            }
+          } catch (e) {
+            debugPrint('切换到日历页面失败: $e');
           }
         }
       }
