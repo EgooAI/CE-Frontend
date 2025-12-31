@@ -48,6 +48,7 @@ jobs:
           name: chrono-android-${{ steps.commit.outputs.short_sha }}
           path: chrono-android-${{ steps.commit.outputs.short_sha }}.apk
           if-no-files-found: error
+          retention-days: 3
 
   # -------------------------
   # Job 2: iOS Build (Unsigned)
@@ -96,6 +97,7 @@ jobs:
           name: chrono-ios-${{ steps.commit.outputs.short_sha }}
           path: chrono-ios-${{ steps.commit.outputs.short_sha }}.ipa
           if-no-files-found: error
+          retention-days: 3
 
   # -------------------------
   # Job 3: macOS Build
