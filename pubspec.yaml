@@ -72,11 +72,11 @@ dependencies:
   connectivity_plus: ^7.0.0
 
   # === 🛡️ Shorebird 热更防御性预埋 (必加) ===
-  shorebird_code_push: ^1.0.0
+  shorebird_code_push: ^2.0.5
   webview_flutter: ^4.7.0 # 救命神器：万能 H5 容器
   url_launcher: ^6.2.5 # 救命神器：跳外部浏览器/拨号
-  package_info_plus: ^5.0.1 # 获取版本号，用于判断是否执行热更逻辑
-  permission_handler: ^11.3.0 # 动态申请权限 (非常有必要预埋)
+  package_info_plus: ^9.0.0 # 获取版本号，用于判断是否执行热更逻辑
+  permission_handler: ^12.0.1 # 动态申请权限 (非常有必要预埋)
   path_provider: ^2.1.2 # 文件路径 (Hive 可能用到，显式声明更安全)
 
 dev_dependencies:
@@ -93,7 +93,7 @@ dev_dependencies:
 
   # Hive 代码生成
   hive_generator: ^2.0.1
-  build_runner: ^2.4.6
+  build_runner: ^2.4.13
 
   flutter_launcher_icons: ^0.14.4
 
