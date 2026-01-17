@@ -50,7 +50,6 @@ jobs:
         run: |
           shorebird patch android \
             --release-version=${{ inputs.release-version }} \
-            --force \
             -- --target-platform android-arm64
 
       - name: ✅ Patch 完成通知
@@ -99,8 +98,7 @@ jobs:
           SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
         run: |
           shorebird patch ios \
-            --release-version=${{ inputs.release-version }} \
-            --force
+            --release-version=${{ inputs.release-version }}
 
       - name: ✅ Patch 完成通知
         run: |
