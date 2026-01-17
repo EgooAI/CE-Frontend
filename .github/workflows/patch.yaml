@@ -50,8 +50,8 @@ jobs:
         run: |
           shorebird patch android \
             --release-version=${{ inputs.release-version }} \
-            --target-platform android-arm64 \
-            --force
+            --force \
+            -- --target-platform android-arm64
 
       - name: ✅ Patch 完成通知
         run: |
@@ -85,14 +85,14 @@ jobs:
         with:
           xcode-version: latest-stable
 
+      - name: 📦 安装依赖
+        run: flutter pub get
+
       - name: 📦 安装 CocoaPods
         run: |
           cd ios
           pod install
           cd ..
-
-      - name: 📦 安装依赖
-        run: flutter pub get
 
       - name: 🚀 Shorebird Patch iOS
         env:
