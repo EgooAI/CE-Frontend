@@ -1685,7 +1685,7 @@ class _ChatPageState extends State<ChatPage> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: isUser
-                              ? Text(
+                              ? SelectableText(
                                   message.content,
                                   style: const TextStyle(color: Colors.white),
                                 )
