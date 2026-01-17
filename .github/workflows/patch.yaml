@@ -1,0 +1,172 @@
+name: 🔧 Shorebird Patch
+
+on:
+  workflow_dispatch:
+    inputs:
+      release-version:
+        description: "要 patch 的版本号（如 1.0.1）"
+        required: true
+        type: string
+      patch-description:
+        description: "Patch 描述（可选）"
+        required: false
+        type: string
+        default: "修复 bug 和性能优化"
+
+jobs:
+  # ========================
+  # Android Patch
+  # ========================
+  patch-android:
+    name: Patch Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: 📥 Checkout 代码
+        uses: actions/checkout@v4
+
+      - name: ☕ Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "zulu"
+          java-version: "17"
+
+      - name: 🐦 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          cache: true
+
+      - name: 🔧 Setup Shorebird
+        uses: shorebirdtech/setup-shorebird@v1
+
+      - name: 📦 安装依赖
+        run: flutter pub get
+
+      - name: 🚀 Shorebird Patch Android
+        env:
+          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+        run: |
+          shorebird patch android \
+            --release-version=${{ inputs.release-version }} \
+            --target-platform android-arm64 \
+            --force
+
+      - name: ✅ Patch 完成通知
+        run: |
+          echo "✅ Android Patch 发布成功！"
+          echo "版本: ${{ inputs.release-version }}"
+          echo "描述: ${{ inputs.patch-description }}"
+
+  # ========================
+  # iOS Patch
+  # ========================
+  patch-ios:
+    name: Patch iOS
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: 📥 Checkout 代码
+        uses: actions/checkout@v4
+
+      - name: 🐦 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          cache: true
+
+      - name: 🔧 Setup Shorebird
+        uses: shorebirdtech/setup-shorebird@v1
+
+      - name: 🍎 Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: 📦 安装 CocoaPods
+        run: |
+          cd ios
+          pod install
+          cd ..
+
+      - name: 📦 安装依赖
+        run: flutter pub get
+
+      - name: 🚀 Shorebird Patch iOS
+        env:
+          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+        run: |
+          shorebird patch ios \
+            --release-version=${{ inputs.release-version }} \
+            --force
+
+      - name: ✅ Patch 完成通知
+        run: |
+          echo "✅ iOS Patch 发布成功！"
+          echo "版本: ${{ inputs.release-version }}"
+          echo "描述: ${{ inputs.patch-description }}"
+
+  # ========================
+  # 发布完成通知
+  # ========================
+  notify-completion:
+    name: 通知完成
+    runs-on: ubuntu-latest
+    needs: [patch-android, patch-ios]
+    if: always()
+
+    steps:
+      - name: 📊 检查状态
+        run: |
+          echo "## 🔧 Shorebird Patch 发布报告"
+          echo ""
+          echo "**目标版本:** ${{ inputs.release-version }}"
+          echo "**描述:** ${{ inputs.patch-description }}"
+          echo ""
+          echo "### 发布状态"
+          echo "- Android: ${{ needs.patch-android.result == 'success' && '✅ 成功' || '❌ 失败' }}"
+          echo "- iOS: ${{ needs.patch-ios.result == 'success' && '✅ 成功' || '❌ 失败' }}"
+          echo ""
+          echo "### 验证命令"
+          echo '```bash'
+          echo "# 查看 Android patches"
+          echo "shorebird patches list --release-version=${{ inputs.release-version }} --platform android"
+          echo ""
+          echo "# 查看 iOS patches"
+          echo "shorebird patches list --release-version=${{ inputs.release-version }} --platform ios"
+          echo '```'
+          echo ""
+          echo "### 下一步"
+          echo "1. 等待 5-10 分钟让补丁在服务器上生效"
+          echo "2. 安装了 v${{ inputs.release-version }} Shorebird 版本的用户将自动收到更新"
+          echo "3. 可以在 Shorebird 控制台查看补丁下载情况"
+
+      - name: 🎉 发布成功
+        if: needs.patch-android.result == 'success' && needs.patch-ios.result == 'success'
+        run: |
+          echo "🎉 所有平台 Patch 发布成功！"
+          echo ""
+          echo "✅ Android Patch 已发布"
+          echo "✅ iOS Patch 已发布"
+          echo ""
+          echo "📱 用户将在下次启动应用时收到更新"
+
+      - name: ⚠️ 部分失败
+        if: (needs.patch-android.result == 'success' && needs.patch-ios.result != 'success') || (needs.patch-android.result != 'success' && needs.patch-ios.result == 'success')
+        run: |
+          echo "⚠️ 部分平台 Patch 发布失败"
+          echo ""
+          echo "请检查失败的 job 日志并重新运行"
+
+      - name: ❌ 全部失败
+        if: needs.patch-android.result != 'success' && needs.patch-ios.result != 'success'
+        run: |
+          echo "❌ 所有平台 Patch 发布失败"
+          echo ""
+          echo "请检查以下问题："
+          echo "1. SHOREBIRD_TOKEN 是否配置正确"
+          echo "2. 目标版本 ${{ inputs.release-version }} 是否存在"
+          echo "3. 代码是否有语法错误"
+          exit 1

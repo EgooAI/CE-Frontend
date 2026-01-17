@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/user.dart';
 import '../services/auth_service.dart';
 import 'login_page.dart';
+import 'package:shorebird_code_push/shorebird_code_push.dart';
 
 class ProfilePage extends StatefulWidget {
   final User initialUser;
@@ -14,11 +15,27 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   late User user;
+  String? _patchVersion;
+  final _shorebirdUpdater = ShorebirdUpdater();
 
   @override
   void initState() {
     super.initState();
     user = widget.initialUser;
+    _loadPatchVersion();
+  }
+
+  Future<void> _loadPatchVersion() async {
+    try {
+      final patch = await _shorebirdUpdater.readCurrentPatch();
+      setState(() {
+        _patchVersion = patch?.number.toString() ?? '无';
+      });
+    } catch (e) {
+      setState(() {
+        _patchVersion = '未启用';
+      });
+    }
   }
 
   Future<void> _navigateToEditEmail() async {
@@ -225,6 +242,29 @@ class _ProfilePageState extends State<ProfilePage> {
                 onTap: () {
                   Navigator.pushNamed(context, '/cache-management');
                 },
+              ),
+              const SizedBox(height: 16),
+              const Divider(),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.bolt, size: 18, color: Colors.orange),
+                    const SizedBox(width: 6),
+                    const Text(
+                      'Shorebird Patch 版本号: ',
+                      style: TextStyle(fontSize: 13, color: Colors.grey),
+                    ),
+                    Text(
+                      _patchVersion ?? '加载中...',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Colors.blueGrey,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
