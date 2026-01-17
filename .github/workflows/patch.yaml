@@ -50,6 +50,7 @@ jobs:
         run: |
           shorebird patch android \
             --release-version=${{ inputs.release-version }} \
+            --allow-native-dex-changes \
             -- --target-platform android-arm64
 
       - name: ✅ Patch 完成通知
@@ -93,12 +94,13 @@ jobs:
           pod install
           cd ..
 
-      - name: 🚀 Shorebird Patch iOS
+      - name: 🚀 Shorebird Patch iOS (无签名)
         env:
           SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
         run: |
           shorebird patch ios \
-            --release-version=${{ inputs.release-version }}
+            --release-version=${{ inputs.release-version }} \
+            -- --no-codesign
 
       - name: ✅ Patch 完成通知
         run: |
