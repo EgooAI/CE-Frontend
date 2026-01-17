@@ -302,21 +302,9 @@ jobs:
 
       - name: Package IPA
         run: |
-          echo "📂 Checking build output..."
-          ls -la build/ios/ || true
-          ls -la build/ios/iphoneos/ || true
-
-          if [ -d "build/ios/iphoneos/Runner.app" ]; then
-            echo "✅ Found Runner.app"
-            mkdir Payload
-            mv build/ios/iphoneos/Runner.app Payload
-            zip -r chrono-ios-shorebird-v${{ needs.validate-version.outputs.version }}.ipa Payload
-          else
-            echo "❌ Runner.app not found!"
-            echo "Available files:"
-            find build/ios -name "*.app" || true
-            exit 1
-          fi
+          mkdir Payload
+          mv build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app Payload
+          zip -r chrono-ios-shorebird-v${{ needs.validate-version.outputs.version }}.ipa Payload
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
