@@ -96,11 +96,15 @@ jobs:
           echo "org.gradle.daemon=true" >> ~/.gradle/gradle.properties
           echo "org.gradle.parallel=true" >> ~/.gradle/gradle.properties
           echo "org.gradle.caching=true" >> ~/.gradle/gradle.properties
-          echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError" >> ~/.gradle/gradle.properties
+          echo "org.gradle.configureondemand=true" >> ~/.gradle/gradle.properties
+          echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+UseParallelGC" >> ~/.gradle/gradle.properties
+          echo "android.enableR8.fullMode=false" >> ~/.gradle/gradle.properties
 
       - name: Build Standard APK
         run: |
           flutter build apk --release \
+            --target-platform android-arm64 \
+            --no-tree-shake-icons \
             --dart-define=API_URL=${{ secrets.API_URL }} \
             --dart-define=XFYUN_APP_ID=${{ secrets.XFYUN_APP_ID }} \
             --dart-define=XFYUN_ACCESS_KEY_ID=${{ secrets.XFYUN_ACCESS_KEY_ID }} \
@@ -158,7 +162,9 @@ jobs:
           echo "org.gradle.daemon=true" >> ~/.gradle/gradle.properties
           echo "org.gradle.parallel=true" >> ~/.gradle/gradle.properties
           echo "org.gradle.caching=true" >> ~/.gradle/gradle.properties
-          echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError" >> ~/.gradle/gradle.properties
+          echo "org.gradle.configureondemand=true" >> ~/.gradle/gradle.properties
+          echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+UseParallelGC" >> ~/.gradle/gradle.properties
+          echo "android.enableR8.fullMode=false" >> ~/.gradle/gradle.properties
 
       - name: Shorebird Release
         env:
@@ -166,6 +172,7 @@ jobs:
         run: |
           shorebird release android \
             --artifact apk \
+            --target-platform android-arm64 \
             -- \
             --dart-define=API_URL=${{ secrets.API_URL }} \
             --dart-define=XFYUN_APP_ID=${{ secrets.XFYUN_APP_ID }} \
@@ -294,9 +301,21 @@ jobs:
 
       - name: Package IPA
         run: |
-          mkdir Payload
-          mv build/ios/iphoneos/Runner.app Payload
-          zip -r chrono-ios-shorebird-v${{ needs.validate-version.outputs.version }}.ipa Payload
+          echo "📂 Checking build output..."
+          ls -la build/ios/ || true
+          ls -la build/ios/iphoneos/ || true
+
+          if [ -d "build/ios/iphoneos/Runner.app" ]; then
+            echo "✅ Found Runner.app"
+            mkdir Payload
+            mv build/ios/iphoneos/Runner.app Payload
+            zip -r chrono-ios-shorebird-v${{ needs.validate-version.outputs.version }}.ipa Payload
+          else
+            echo "❌ Runner.app not found!"
+            echo "Available files:"
+            find build/ios -name "*.app" || true
+            exit 1
+          fi
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
