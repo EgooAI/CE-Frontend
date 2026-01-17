@@ -116,7 +116,7 @@ jobs:
         with:
           name: android-standard
           path: chrono-android-v${{ needs.validate-version.outputs.version }}.apk
-          retention-days: 3
+          retention-days: 7
 
   # ====================================================
   # Shorebird Android (支持热更新)
@@ -137,6 +137,12 @@ jobs:
           distribution: "zulu"
           java-version: ${{ env.JAVA_VERSION }}
           cache: "gradle"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          cache: true
 
       - name: Setup Shorebird
         uses: shorebirdtech/setup-shorebird@v1
@@ -177,7 +183,7 @@ jobs:
         with:
           name: android-shorebird
           path: chrono-android-shorebird-v${{ needs.validate-version.outputs.version }}.apk
-          retention-days: 3
+          retention-days: 7
 
   # ====================================================
   # Standard iOS (普通构建)
@@ -197,6 +203,9 @@ jobs:
         with:
           channel: ${{ env.FLUTTER_CHANNEL }}
           cache: true
+
+      - name: Get Dependencies
+        run: flutter pub get
 
       - name: Cache CocoaPods
         uses: actions/cache@v4
@@ -230,7 +239,7 @@ jobs:
         with:
           name: ios-standard
           path: chrono-ios-v${{ needs.validate-version.outputs.version }}.ipa
-          retention-days: 3
+          retention-days: 7
 
   # ====================================================
   # Shorebird iOS (支持热更新)
@@ -245,10 +254,19 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          cache: true
+
       - name: Setup Shorebird
         uses: shorebirdtech/setup-shorebird@v1
         with:
           cache: true
+
+      - name: Get Dependencies
+        run: flutter pub get
 
       - name: Cache CocoaPods
         uses: actions/cache@v4
@@ -287,7 +305,7 @@ jobs:
         with:
           name: ios-shorebird
           path: chrono-ios-shorebird-v${{ needs.validate-version.outputs.version }}.ipa
-          retention-days: 3
+          retention-days: 7
 
   # ====================================================
   # 创建 GitHub Release
@@ -308,6 +326,8 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 获取完整历史，包括所有 tags
 
       - name: Download All Artifacts
         uses: actions/download-artifact@v4
@@ -393,7 +413,9 @@ jobs:
   # ====================================================
   post-release:
     name: Post-Release Tasks
-    needs: create-release
+    needs:
+      - validate-version
+      - create-release
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
