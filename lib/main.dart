@@ -5,19 +5,19 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:workmanager/workmanager.dart';
 import 'package:shorebird_code_push/shorebird_code_push.dart';
-import 'pages/login_page.dart';
+import 'pages/auth/login_page.dart';
 import 'pages/main_page.dart';
-import 'pages/edit_email_page.dart';
-import 'pages/edit_username_page.dart';
-import 'pages/edit_password_page.dart';
-import 'pages/reminders_page.dart'; // ignore: unused_import
-import 'pages/recurring_schedules_page.dart';
-import 'pages/cache_management_page.dart';
-import 'pages/daily_records_page.dart';
-import 'services/auth_service.dart';
-import 'services/api_client.dart';
-import 'services/sync_scheduler.dart';
-import 'models/user.dart';
+import 'pages/profile/edit_email_page.dart';
+import 'pages/profile/edit_username_page.dart';
+import 'pages/profile/edit_password_page.dart';
+import 'pages/reminders/reminders_page.dart'; // ignore: unused_import
+import 'pages/calendar/recurring_schedules_page.dart';
+import 'pages/profile/cache_management_page.dart';
+import 'pages/daily/daily_records_page.dart';
+import 'services/core/auth_service.dart';
+import 'services/core/api_client.dart';
+import 'services/sync/sync_scheduler.dart';
+import 'models/auth/user.dart';
 import 'utils/service_locator.dart';
 
 // 全局 Navigator Key，用于 401 拦截跳转

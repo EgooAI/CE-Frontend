@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/auth/user.dart';
-import '../services/core/auth_service.dart';
-import '../pages/auth/login_page.dart';
+import '../../services/core/auth_service.dart';
+import '../auth/login_page.dart';
 import 'package:shorebird_code_push/shorebird_code_push.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 

@@ -1,11 +1,11 @@
 import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
-import '../models/daily_task.dart';
-import '../models/sync_task.dart';
+import '../models/daily/daily_task.dart';
+import '../models/sync/sync_task.dart';
 import '../services/cache/cache_service.dart';
 import '../services/cache/cache_keys.dart';
-import '../services/daily_task_service.dart';
-import '../services/sync_queue_service.dart';
+import '../services/daily/daily_task_service.dart';
+import '../services/sync/sync_queue_service.dart';
 import '../utils/service_locator.dart';
 
 /// DailyTask 数据仓库

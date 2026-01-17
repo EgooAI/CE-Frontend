@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../models/schedule.dart';
-import '../models/recurrence_rule.dart';
+import '../models/schedule/schedule.dart';
+import '../models/schedule/recurrence_rule.dart';
 
 /// 重复日程辅助工具类
 class RecurrenceHelper {

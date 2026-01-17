@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import '../models/user.dart';
-import 'chat_page.dart';
-import 'calendar_page.dart';
-import 'task_page.dart';
-import 'daily_page.dart';
-import 'profile_page.dart';
+import '../models/auth/user.dart';
+import 'chat/chat_page.dart';
+import 'calendar/calendar_page.dart';
+import 'calendar/task_page.dart';
+import 'daily/daily_page.dart';
+import 'profile/profile_page.dart';
 
 class MainPage extends StatefulWidget {
   final User user;

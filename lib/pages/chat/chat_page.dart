@@ -8,14 +8,14 @@ import 'package:get_it/get_it.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../../models/chat/conversation.dart';
 import '../../repositories/conversation_repository.dart';
-import '../services/chat/conversation_service.dart';
+import '../../services/chat/conversation_service.dart';
 import '../../repositories/schedule_repository.dart';
-import '../services/chat/xfyun_asr_service.dart';
-import '../services/chat/audio_recorder_service.dart';
-import '../services/sync/sync_queue_service.dart';
-import '../widgets/schedule/create_schedule_bottom_sheet.dart';
-import '../widgets/common/offline_banner.dart';
-import '../widgets/common/sync_indicator.dart';
+import '../../services/chat/xfyun_asr_service.dart';
+import '../../services/chat/audio_recorder_service.dart';
+import '../../services/sync/sync_queue_service.dart';
+import '../../widgets/schedule/create_schedule_bottom_sheet.dart';
+import '../../widgets/common/offline_banner.dart';
+import '../../widgets/common/sync_indicator.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});

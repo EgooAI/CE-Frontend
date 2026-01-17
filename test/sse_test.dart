@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:ce_frontend/services/sse_client.dart';
+import 'package:ce_frontend/services/chat/sse_client.dart';
 
 void main() {
   test('SSE client can be imported', () {

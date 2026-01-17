@@ -1,11 +1,11 @@
 import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
-import '../models/conversation.dart';
-import '../models/sync_task.dart';
+import '../models/chat/conversation.dart';
+import '../models/sync/sync_task.dart';
 import '../services/cache/cache_service.dart';
 import '../services/cache/cache_keys.dart';
-import '../services/conversation_service.dart';
-import '../services/sync_queue_service.dart';
+import '../services/chat/conversation_service.dart';
+import '../services/sync/sync_queue_service.dart';
 import '../utils/service_locator.dart';
 
 /// Conversation 数据仓库
