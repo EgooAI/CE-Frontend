@@ -48,6 +48,16 @@ jobs:
       - name: 📦 安装依赖
         run: flutter pub get
 
+      - name: ⚙️ Configure Gradle (保持与 Release 一致)
+        run: |
+          mkdir -p ~/.gradle
+          echo "org.gradle.daemon=true" >> ~/.gradle/gradle.properties
+          echo "org.gradle.parallel=true" >> ~/.gradle/gradle.properties
+          echo "org.gradle.caching=true" >> ~/.gradle/gradle.properties
+          echo "org.gradle.configureondemand=true" >> ~/.gradle/gradle.properties
+          echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+UseParallelGC" >> ~/.gradle/gradle.properties
+          echo "android.enableR8.fullMode=false" >> ~/.gradle/gradle.properties
+
       - name: 🚀 Shorebird Patch Android
         env:
           SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
