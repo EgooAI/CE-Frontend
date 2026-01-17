@@ -48,6 +48,10 @@ class _ChatPageState extends State<ChatPage> {
   stt.SpeechToText? _speechToText; // iOS 语音识别
   XunfeiAsrService? _xunfeiAsr; // 科大讯飞语音识别（Android + Web）
   AudioRecorderService? _audioRecorder; // 音频录制服务
+
+  // 滑动收起键盘相关
+  double _lastScrollPosition = 0;
+  DateTime? _lastScrollTime;
   bool _isListening = false; // 是否正在监听
   String _recognizedText = ''; // 已识别的文本（最终累积结果）
   String _tempRecognizedText = ''; // 临时识别文本（中间结果）
@@ -1663,36 +1667,63 @@ class _ChatPageState extends State<ChatPage> {
                 ? const Center(child: CircularProgressIndicator())
                 : _messages.isEmpty
                 ? _buildWelcomeGuide()
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _messages.length,
-                    itemBuilder: (context, index) {
-                      final message = _messages[index];
-                      final isUser = message.role == 'user';
-                      return Align(
-                        alignment: isUser
-                            ? Alignment.centerRight
-                            : Alignment.centerLeft,
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(vertical: 4),
-                          padding: const EdgeInsets.all(12),
-                          constraints: BoxConstraints(
-                            maxWidth: MediaQuery.of(context).size.width * 0.75,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isUser ? Colors.blue : Colors.grey[300],
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: isUser
-                              ? SelectableText(
-                                  message.content,
-                                  style: const TextStyle(color: Colors.white),
-                                )
-                              : _buildMessageContent(message.content),
-                        ),
-                      );
+                : NotificationListener<ScrollNotification>(
+                    onNotification: (notification) {
+                      if (notification is ScrollUpdateNotification) {
+                        final currentPosition = notification.metrics.pixels;
+                        final currentTime = DateTime.now();
+
+                        if (_lastScrollTime != null) {
+                          // 计算滑动速度（像素/毫秒）
+                          final deltaPosition = currentPosition - _lastScrollPosition;
+                          final deltaTime = currentTime.difference(_lastScrollTime!).inMilliseconds;
+                          
+                          if (deltaTime > 0) {
+                            final velocity = deltaPosition.abs() / deltaTime;
+                            
+                            // 只在向下快速滑动时收起键盘（速度 > 2 px/ms，约等于 2000 px/s）
+                            if (deltaPosition > 0 && velocity > 2 && FocusScope.of(context).hasFocus) {
+                              FocusScope.of(context).unfocus();
+                            }
+                          }
+                        }
+
+                        _lastScrollPosition = currentPosition;
+                        _lastScrollTime = currentTime;
+                      }
+                      return false;
                     },
+                    child: ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _messages.length,
+                      itemBuilder: (context, index) {
+                        final message = _messages[index];
+                        final isUser = message.role == 'user';
+                        return Align(
+                          alignment: isUser
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(vertical: 4),
+                            padding: const EdgeInsets.all(12),
+                            constraints: BoxConstraints(
+                              maxWidth: MediaQuery.of(context).size.width * 0.75,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isUser ? Colors.blue : Colors.grey[300],
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: isUser
+                                ? SelectableText(
+                                    message.content,
+                                    style: const TextStyle(color: Colors.white),
+                                  )
+                                : _buildMessageContent(message.content),
+                          ),
+                        );
+                      },
+                    ),
                   ),
           ),
           if (_isSending)
