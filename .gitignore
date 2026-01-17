@@ -81,6 +81,7 @@ app.*.map.json
 **/windows/flutter/ephemeral/
 **/macos/Flutter/ephemeral/
 
+# Environment variables
 .env
 
 .vscode/**

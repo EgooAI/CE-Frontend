@@ -1,0 +1,391 @@
+name: Release - Build & Deploy
+
+# 用途：仅在版本号更新时构建完整安装包
+# 触发方式：推送 Git Tag (格式: v1.2.3)
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch: # 允许手动触发（用于紧急发布）
+
+env:
+  JAVA_VERSION: "17"
+  FLUTTER_CHANNEL: "stable"
+
+jobs:
+  # ====================================================
+  # 验证版本号
+  # ====================================================
+  validate-version:
+    name: Validate Version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.extract.outputs.version }}
+      build_number: ${{ steps.extract.outputs.build_number }}
+      tag_version: ${{ steps.extract.outputs.tag_version }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Extract Version Info
+        id: extract
+        run: |
+          # 从 pubspec.yaml 提取版本号
+          PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | cut -d ' ' -f 2)
+          VERSION=$(echo $PUBSPEC_VERSION | cut -d '+' -f 1)
+          BUILD_NUMBER=$(echo $PUBSPEC_VERSION | cut -d '+' -f 2)
+
+          # 从 Git Tag 提取版本号（去掉 'v' 前缀）
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "build_number=$BUILD_NUMBER" >> $GITHUB_OUTPUT
+          echo "tag_version=$TAG_VERSION" >> $GITHUB_OUTPUT
+
+          echo "📦 pubspec.yaml 版本: $VERSION+$BUILD_NUMBER"
+          echo "🏷️  Git Tag 版本: $TAG_VERSION"
+
+      - name: Check Version Match
+        run: |
+          if [ "${{ steps.extract.outputs.version }}" != "${{ steps.extract.outputs.tag_version }}" ]; then
+            echo "❌ 错误：版本号不匹配！"
+            echo "   pubspec.yaml: ${{ steps.extract.outputs.version }}"
+            echo "   Git Tag: ${{ steps.extract.outputs.tag_version }}"
+            echo ""
+            echo "💡 解决方案："
+            echo "   1. 修改 pubspec.yaml 中的 version 为 ${{ steps.extract.outputs.tag_version }}+<build_number>"
+            echo "   2. 或删除错误的 Tag：git tag -d v${{ steps.extract.outputs.tag_version }} && git push origin :refs/tags/v${{ steps.extract.outputs.tag_version }}"
+            exit 1
+          fi
+          echo "✅ 版本号验证通过"
+
+  # ====================================================
+  # Standard Android (普通构建)
+  # ====================================================
+  build-android-standard:
+    name: Build Android (Standard)
+    needs: validate-version
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "zulu"
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: "gradle"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          cache: true
+
+      - name: Get Dependencies
+        run: flutter pub get
+
+      - name: Build Standard APK
+        run: |
+          flutter build apk --release \
+            --dart-define=API_URL=${{ secrets.API_URL }} \
+            --dart-define=XFYUN_APP_ID=${{ secrets.XFYUN_APP_ID }} \
+            --dart-define=XFYUN_ACCESS_KEY_ID=${{ secrets.XFYUN_ACCESS_KEY_ID }} \
+            --dart-define=XFYUN_ACCESS_KEY_SECRET=${{ secrets.XFYUN_ACCESS_KEY_SECRET }}
+
+      - name: Rename APK
+        run: |
+          mv build/app/outputs/flutter-apk/app-release.apk \
+             chrono-android-v${{ needs.validate-version.outputs.version }}.apk
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-standard
+          path: chrono-android-v${{ needs.validate-version.outputs.version }}.apk
+          retention-days: 3
+
+  # ====================================================
+  # Shorebird Android (支持热更新)
+  # ====================================================
+  build-android-shorebird:
+    name: Build Android (Shorebird)
+    needs: validate-version
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "zulu"
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: "gradle"
+
+      - name: Setup Shorebird
+        uses: shorebirdtech/setup-shorebird@v1
+        with:
+          cache: true
+
+      - name: Get Dependencies
+        run: flutter pub get
+
+      - name: Shorebird Release
+        env:
+          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+        run: |
+          shorebird release android \
+            --artifact-type apk \
+            --flutter-version=${{ env.FLUTTER_CHANNEL }} \
+            -- \
+            --dart-define=API_URL=${{ secrets.API_URL }} \
+            --dart-define=XFYUN_APP_ID=${{ secrets.XFYUN_APP_ID }} \
+            --dart-define=XFYUN_ACCESS_KEY_ID=${{ secrets.XFYUN_ACCESS_KEY_ID }} \
+            --dart-define=XFYUN_ACCESS_KEY_SECRET=${{ secrets.XFYUN_ACCESS_KEY_SECRET }}
+
+      - name: Rename APK
+        run: |
+          mv build/app/outputs/flutter-apk/app-release.apk \
+             chrono-android-shorebird-v${{ needs.validate-version.outputs.version }}.apk
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-shorebird
+          path: chrono-android-shorebird-v${{ needs.validate-version.outputs.version }}.apk
+          retention-days: 3
+
+  # ====================================================
+  # Standard iOS (普通构建)
+  # ====================================================
+  build-ios-standard:
+    name: Build iOS (Standard)
+    needs: validate-version
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          cache: true
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: ios/Pods
+          key: ${{ runner.os }}-pods-${{ hashFiles('ios/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
+
+      - name: Install Pods
+        run: |
+          cd ios
+          pod install
+
+      - name: Build iOS (No Codesign)
+        run: |
+          flutter build ios --release --no-codesign \
+            --dart-define=API_URL=${{ secrets.API_URL }} \
+            --dart-define=XFYUN_APP_ID=${{ secrets.XFYUN_APP_ID }} \
+            --dart-define=XFYUN_ACCESS_KEY_ID=${{ secrets.XFYUN_ACCESS_KEY_ID }} \
+            --dart-define=XFYUN_ACCESS_KEY_SECRET=${{ secrets.XFYUN_ACCESS_KEY_SECRET }}
+
+      - name: Package IPA
+        run: |
+          mkdir Payload
+          mv build/ios/iphoneos/Runner.app Payload
+          zip -r chrono-ios-v${{ needs.validate-version.outputs.version }}.ipa Payload
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-standard
+          path: chrono-ios-v${{ needs.validate-version.outputs.version }}.ipa
+          retention-days: 3
+
+  # ====================================================
+  # Shorebird iOS (支持热更新)
+  # ====================================================
+  build-ios-shorebird:
+    name: Build iOS (Shorebird)
+    needs: validate-version
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Shorebird
+        uses: shorebirdtech/setup-shorebird@v1
+        with:
+          cache: true
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: ios/Pods
+          key: ${{ runner.os }}-pods-${{ hashFiles('ios/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
+
+      - name: Install Pods
+        run: |
+          cd ios
+          pod install
+
+      - name: Shorebird Release iOS
+        env:
+          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+        run: |
+          shorebird release ios \
+            --no-codesign \
+            --flutter-version=${{ env.FLUTTER_CHANNEL }} \
+            -- \
+            --dart-define=API_URL=${{ secrets.API_URL }} \
+            --dart-define=XFYUN_APP_ID=${{ secrets.XFYUN_APP_ID }} \
+            --dart-define=XFYUN_ACCESS_KEY_ID=${{ secrets.XFYUN_ACCESS_KEY_ID }} \
+            --dart-define=XFYUN_ACCESS_KEY_SECRET=${{ secrets.XFYUN_ACCESS_KEY_SECRET }}
+
+      - name: Package IPA
+        run: |
+          mkdir Payload
+          mv build/ios/iphoneos/Runner.app Payload
+          zip -r chrono-ios-shorebird-v${{ needs.validate-version.outputs.version }}.ipa Payload
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-shorebird
+          path: chrono-ios-shorebird-v${{ needs.validate-version.outputs.version }}.ipa
+          retention-days: 3
+
+  # ====================================================
+  # 创建 GitHub Release
+  # ====================================================
+  create-release:
+    name: Create GitHub Release
+    needs:
+      - validate-version
+      - build-android-standard
+      - build-android-shorebird
+      - build-ios-standard
+      - build-ios-shorebird
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Generate Changelog
+        id: changelog
+        run: |
+          # 获取上一个 tag
+          PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed -n '2p')
+
+          if [ -z "$PREVIOUS_TAG" ]; then
+            echo "这是第一个正式版本发布"
+            CHANGELOG="首次发布"
+          else
+            echo "生成从 $PREVIOUS_TAG 到 ${{ github.ref_name }} 的更新日志"
+            CHANGELOG=$(git log $PREVIOUS_TAG..${{ github.ref_name }} --pretty=format:"- %s (%an)" --no-merges)
+          fi
+
+          # 写入文件供后续步骤使用
+          echo "$CHANGELOG" > changelog.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Chrono v${{ needs.validate-version.outputs.version }}
+          body: |
+            ## 📦 版本信息
+
+            **版本号：** ${{ needs.validate-version.outputs.version }}
+            **构建号：** ${{ needs.validate-version.outputs.build_number }}
+            **发布时间：** ${{ github.event.head_commit.timestamp }}
+
+            ## 📱 安装包下载
+
+            ### Android
+            - **chrono-android-v${{ needs.validate-version.outputs.version }}.apk** - 普通版（适合应用商店）
+            - **chrono-android-shorebird-v${{ needs.validate-version.outputs.version }}.apk** - 热更新版（支持在线修复）
+
+            ### iOS
+            - **chrono-ios-v${{ needs.validate-version.outputs.version }}.ipa** - 普通版（需自签）
+            - **chrono-ios-shorebird-v${{ needs.validate-version.outputs.version }}.ipa** - 热更新版（需自签）
+
+            ## 🔄 更新日志
+
+            $(cat changelog.txt)
+
+            ## 🚀 安装说明
+
+            **Android：**
+            1. 下载对应的 APK 文件
+            2. 开启"允许安装未知应用"权限
+            3. 点击安装
+
+            **iOS：**
+            1. 下载 IPA 文件
+            2. 使用 AltStore/Sideloadly 自签安装
+            3. 在设置中信任开发者证书
+
+            ## 🔧 Shorebird 热更新说明
+
+            如果你安装的是 **Shorebird 版本**，小更新无需重新安装：
+            - 应用会在后台自动检查更新
+            - 下次启动时自动应用补丁
+            - 查看当前版本：设置 → 关于
+
+            ---
+
+            **注意：** 如果从旧版本升级，建议先卸载后重装。
+
+          files: |
+            ./artifacts/android-standard/*.apk
+            ./artifacts/android-shorebird/*.apk
+            ./artifacts/ios-standard/*.ipa
+            ./artifacts/ios-shorebird/*.ipa
+          draft: false
+          prerelease: false
+
+  # ====================================================
+  # 发布后通知
+  # ====================================================
+  post-release:
+    name: Post-Release Tasks
+    needs: create-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Success Notice
+        run: |
+          echo "🎉 版本 v${{ needs.validate-version.outputs.version }} 发布成功！"
+          echo ""
+          echo "📦 下载地址："
+          echo "   https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+          echo ""

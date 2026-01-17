@@ -1,0 +1,72 @@
+name: CI - Code Quality Check
+
+# 用途：仅做代码质量检查，不构建安装包
+# 触发时机：PR 和 push to main
+on:
+  push:
+    branches: ["master"]
+  pull_request:
+    branches: ["master"]
+
+# 防止并发运行
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: "17"
+  FLUTTER_CHANNEL: "stable"
+
+jobs:
+  # ====================================================
+  # 代码质量检查（不构建包）
+  # ====================================================
+  code-quality:
+    name: Code Quality Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "zulu"
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: "gradle"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          cache: true
+
+      - name: Get Dependencies
+        run: flutter pub get
+
+      - name: Format Check
+        run: dart format --set-exit-if-changed .
+
+      - name: Static Analysis
+        run: flutter analyze
+
+      - name: Run Tests
+        run: flutter test --coverage
+
+      - name: Upload Coverage
+        uses: codecov/codecov-action@v4
+        if: always()
+        continue-on-error: true
+        with:
+          files: ./coverage/lcov.info
+
+      # 验证能否编译通过（Debug 模式，速度快）
+      - name: Test Build (Debug APK)
+        run: flutter build apk --debug
+
+      - name: Success Notice
+        if: success()
+        run: |
+          echo "✅ 代码质量检查通过！"
