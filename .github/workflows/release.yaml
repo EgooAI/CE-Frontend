@@ -48,6 +48,7 @@ jobs:
           echo "🏷️  Git Tag 版本: $TAG_VERSION"
 
       - name: Check Version Match
+        if: github.event_name != 'workflow_dispatch'
         run: |
           if [ "${{ steps.extract.outputs.version }}" != "${{ steps.extract.outputs.tag_version }}" ]; then
             echo "❌ 错误：版本号不匹配！"
