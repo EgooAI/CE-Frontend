@@ -3,6 +3,7 @@ import '../models/user.dart';
 import '../services/auth_service.dart';
 import 'login_page.dart';
 import 'package:shorebird_code_push/shorebird_code_push.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class ProfilePage extends StatefulWidget {
   final User initialUser;
@@ -16,6 +17,7 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   late User user;
   String? _patchVersion;
+  String? _appVersion;
   final _shorebirdUpdater = ShorebirdUpdater();
 
   @override
@@ -23,6 +25,7 @@ class _ProfilePageState extends State<ProfilePage> {
     super.initState();
     user = widget.initialUser;
     _loadPatchVersion();
+    _loadAppVersion();
   }
 
   Future<void> _loadPatchVersion() async {
@@ -34,6 +37,19 @@ class _ProfilePageState extends State<ProfilePage> {
     } catch (e) {
       setState(() {
         _patchVersion = '未启用';
+      });
+    }
+  }
+
+  Future<void> _loadAppVersion() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      setState(() {
+        _appVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
+      });
+    } catch (e) {
+      setState(() {
+        _appVersion = '未知';
       });
     }
   }
@@ -247,21 +263,49 @@ class _ProfilePageState extends State<ProfilePage> {
               const Divider(),
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                child: Column(
                   children: [
-                    const Icon(Icons.bolt, size: 18, color: Colors.orange),
-                    const SizedBox(width: 6),
-                    const Text(
-                      'Shorebird Patch 版本号: ',
-                      style: TextStyle(fontSize: 13, color: Colors.grey),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.info_outline,
+                          size: 18,
+                          color: Colors.blue,
+                        ),
+                        const SizedBox(width: 6),
+                        const Text(
+                          '应用版本: ',
+                          style: TextStyle(fontSize: 13, color: Colors.grey),
+                        ),
+                        Text(
+                          _appVersion ?? '加载中...',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.blueGrey,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ),
-                    Text(
-                      _patchVersion ?? '加载中...',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Colors.blueGrey,
-                      ),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.bolt, size: 18, color: Colors.orange),
+                        const SizedBox(width: 6),
+                        const Text(
+                          'Patch 版本: ',
+                          style: TextStyle(fontSize: 13, color: Colors.grey),
+                        ),
+                        Text(
+                          _patchVersion ?? '加载中...',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.blueGrey,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),

@@ -54,7 +54,11 @@ jobs:
         run: |
           shorebird patch android \
             --release-version=${{ inputs.release-version }} \
-            -- --target-platform android-arm64
+            -- --target-platform android-arm64 \
+            --dart-define=API_URL=${{ secrets.API_URL }} \
+            --dart-define=XFYUN_APP_ID=${{ secrets.XFYUN_APP_ID }} \
+            --dart-define=XFYUN_ACCESS_KEY_ID=${{ secrets.XFYUN_ACCESS_KEY_ID }} \
+            --dart-define=XFYUN_ACCESS_KEY_SECRET=${{ secrets.XFYUN_ACCESS_KEY_SECRET }}
 
       - name: ✅ Patch 完成通知
         run: |
@@ -103,7 +107,11 @@ jobs:
         run: |
           shorebird patch ios \
             --release-version=${{ inputs.release-version }} \
-            -- --no-codesign
+            -- --no-codesign \
+            --dart-define=API_URL=${{ secrets.API_URL }} \
+            --dart-define=XFYUN_APP_ID=${{ secrets.XFYUN_APP_ID }} \
+            --dart-define=XFYUN_ACCESS_KEY_ID=${{ secrets.XFYUN_ACCESS_KEY_ID }} \
+            --dart-define=XFYUN_ACCESS_KEY_SECRET=${{ secrets.XFYUN_ACCESS_KEY_SECRET }}
 
       - name: ✅ Patch 完成通知
         run: |

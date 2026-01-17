@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:workmanager/workmanager.dart';
+import 'package:shorebird_code_push/shorebird_code_push.dart';
 import 'pages/login_page.dart';
 import 'pages/main_page.dart';
 import 'pages/edit_email_page.dart';
@@ -76,11 +78,91 @@ class _MyAppState extends State<MyApp> {
   bool _isLoading = true;
   bool _isLoggedIn = false;
   User? _user;
+  Timer? _updateCheckTimer;
 
   @override
   void initState() {
     super.initState();
     _initializeApp();
+    _startUpdateMonitoring();
+  }
+
+  @override
+  void dispose() {
+    _updateCheckTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startUpdateMonitoring() {
+    if (kIsWeb) return;
+
+    // 首次立即检查
+    _checkForUpdates();
+
+    // 每隔 5 分钟检查一次状态
+    _updateCheckTimer = Timer.periodic(const Duration(minutes: 5), (timer) {
+      _checkForUpdates();
+    });
+  }
+
+  Future<void> _checkForUpdates() async {
+    // 仅在非 Web 平台检查 Shorebird 更新
+    if (kIsWeb) return;
+
+    try {
+      final updater = ShorebirdUpdater();
+
+      // 检查是否已下载完成（Shorebird 后台自动下载）
+      final status = await updater.checkForUpdate();
+
+      if (status == UpdateStatus.restartRequired) {
+        print('[Shorebird] 检测到已下载的更新，提示重启');
+
+        // 停止轮询
+        _updateCheckTimer?.cancel();
+
+        if (mounted && navigatorKey.currentContext != null) {
+          _showUpdateDialog();
+        }
+      }
+    } catch (e) {
+      print('[Shorebird] 检查更新失败: $e');
+    }
+  }
+
+  void _showUpdateDialog() {
+    showDialog(
+      context: navigatorKey.currentContext!,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.system_update, color: Colors.blue),
+            SizedBox(width: 8),
+            Text('已获取更新'),
+          ],
+        ),
+        content: const Text(
+          '应用已下载最新版本，请重启应用以应用更新。',
+          style: TextStyle(fontSize: 16),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+            child: const Text('稍后重启'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              // 关闭应用（用户手动重启）
+              SystemNavigator.pop();
+            },
+            child: const Text('立即重启'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _initializeApp() async {
