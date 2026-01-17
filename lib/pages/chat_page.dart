@@ -1675,14 +1675,19 @@ class _ChatPageState extends State<ChatPage> {
 
                         if (_lastScrollTime != null) {
                           // 计算滑动速度（像素/毫秒）
-                          final deltaPosition = currentPosition - _lastScrollPosition;
-                          final deltaTime = currentTime.difference(_lastScrollTime!).inMilliseconds;
-                          
+                          final deltaPosition =
+                              currentPosition - _lastScrollPosition;
+                          final deltaTime = currentTime
+                              .difference(_lastScrollTime!)
+                              .inMilliseconds;
+
                           if (deltaTime > 0) {
                             final velocity = deltaPosition.abs() / deltaTime;
-                            
+
                             // 只在向下快速滑动时收起键盘（速度 > 2 px/ms，约等于 2000 px/s）
-                            if (deltaPosition > 0 && velocity > 2 && FocusScope.of(context).hasFocus) {
+                            if (deltaPosition > 0 &&
+                                velocity > 2 &&
+                                FocusScope.of(context).hasFocus) {
                               FocusScope.of(context).unfocus();
                             }
                           }
@@ -1708,7 +1713,8 @@ class _ChatPageState extends State<ChatPage> {
                             margin: const EdgeInsets.symmetric(vertical: 4),
                             padding: const EdgeInsets.all(12),
                             constraints: BoxConstraints(
-                              maxWidth: MediaQuery.of(context).size.width * 0.75,
+                              maxWidth:
+                                  MediaQuery.of(context).size.width * 0.75,
                             ),
                             decoration: BoxDecoration(
                               color: isUser ? Colors.blue : Colors.grey[300],
