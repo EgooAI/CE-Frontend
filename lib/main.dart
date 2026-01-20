@@ -19,12 +19,10 @@ import 'services/core/api_client.dart';
 import 'services/sync/sync_scheduler.dart';
 import 'models/auth/user.dart';
 import 'utils/service_locator.dart';
+import 'utils/app_keys.dart';
 
 // 全局 Navigator Key，用于 401 拦截跳转
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
-
-// 全局 MainPage Key，用于访问 MainPage 的状态
-final GlobalKey mainPageKey = GlobalKey();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

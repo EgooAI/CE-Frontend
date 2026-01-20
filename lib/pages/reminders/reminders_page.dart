@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/schedule/reminder.dart';
 import '../../services/schedule/reminder_service.dart';
-import '../../main.dart' show mainPageKey;
+import '../../utils/app_keys.dart';
 
 /// 提醒列表页面
 class RemindersPage extends StatefulWidget {

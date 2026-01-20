@@ -16,6 +16,7 @@ import '../../widgets/chat/chat_input_bar.dart';
 import '../../widgets/chat/message_list_view.dart';
 import '../../services/chat/voice_input_service.dart';
 import '../../services/chat/stream_message_handler.dart';
+import '../../utils/app_keys.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
@@ -635,23 +636,18 @@ class _ChatPageState extends State<ChatPage> {
             );
 
             if (shouldNavigate == true && mounted) {
-              // 通过遍历 Widget 树查找 MainPage 的 State 并切换到日历页面
-              Navigator.of(context).popUntil((route) => route.isFirst);
-
-              // 查找祖先 context 中的 MainPage state 并调用公共方法
-              context.visitAncestorElements((element) {
-                if (element.widget.runtimeType.toString() == 'MainPage') {
-                  final state = (element as StatefulElement).state;
-                  // 调用公共方法切换到日历页面（索引 1）
+              final mainState = mainPageKey.currentState;
+              if (mainState != null && mainState.mounted) {
+                Future.microtask(() {
                   try {
-                    (state as dynamic).switchToPage(1);
+                    (mainState as dynamic).navigateToScheduleDate(
+                      schedule.startTime,
+                    );
                   } catch (e) {
                     debugPrint('切换到日历页面失败: $e');
                   }
-                  return false; // 停止遍历
-                }
-                return true; // 继续遍历
-              });
+                });
+              }
             }
           }
         } catch (e) {
