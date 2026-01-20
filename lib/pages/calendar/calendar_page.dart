@@ -8,13 +8,11 @@ import '../../repositories/schedule_repository.dart';
 import '../../services/daily/daily_task_service.dart';
 import '../../services/schedule/schedule_service.dart';
 import '../../services/sync/sync_queue_service.dart';
-import '../../widgets/schedule/schedule_card.dart';
-import '../../widgets/daily/daily_task_card.dart';
 import '../../widgets/schedule/create_schedule_bottom_sheet.dart';
 import '../../widgets/common/offline_banner.dart';
 import '../../widgets/common/sync_indicator.dart';
-import 'package:flutter/rendering.dart';
-import 'package:intl/intl.dart';
+import '../../widgets/calendar/calendar_header_sliver.dart';
+import '../../widgets/calendar/calendar_schedule_list.dart';
 import 'package:get_it/get_it.dart';
 // import 'package:flutter_animate/flutter_animate.dart';
 
@@ -118,10 +116,9 @@ class _CalendarPageState extends State<CalendarPage> {
         month: month,
       );
 
-      final currentUser = await AuthService().getProfile();
       final schedules = monthSchedules.where((s) => s.type != 'daily').toList();
 
-      if (currentUser.config.dailyScheduleDisplayInCalendar == true) {
+      if (_showDailyTasksInCalendar) {
         try {
           final tasks = await _dailyTaskService.getDailyTasks(status: 'active');
           setState(() {
@@ -162,7 +159,8 @@ class _CalendarPageState extends State<CalendarPage> {
 
   Future<void> _loadConfig() async {
     try {
-      final profile = await AuthService().getProfile();
+      final profile = await AuthService().getUser();
+      if (profile == null) return;
       if (!mounted) return;
       setState(() {
         _use24HourFormat = profile.config.use24HourFormat;
@@ -181,8 +179,7 @@ class _CalendarPageState extends State<CalendarPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // 每次页面显示时重新加载日程和配置
-    _loadSchedules();
+    // 避免重复请求：初始化已加载，这里仅保持配置同步
     _loadConfig();
   }
 
@@ -213,12 +210,11 @@ class _CalendarPageState extends State<CalendarPage> {
         month: month,
       );
 
-      final currentUser = await AuthService().getProfile();
       schedules = monthSchedules.where((s) => s.type != 'daily').toList();
 
       List<DailyTask> loadedDailyTasks = [];
       // 如果启用在日历显示日常任务，加载日常数据
-      if (currentUser.config.dailyScheduleDisplayInCalendar == true) {
+      if (_showDailyTasksInCalendar) {
         try {
           loadedDailyTasks = await _dailyTaskService.getDailyTasks(
             status: 'active',
@@ -735,26 +731,46 @@ class _CalendarPageState extends State<CalendarPage> {
               child: CustomScrollView(
                 slivers: [
                   // 1. 核心：可跟随手指收缩的日历头部
-                  SliverPersistentHeader(
-                    pinned: true, // 关键：收缩后固定在顶部
-                    delegate: _CalendarHeaderDelegate(
-                      focusedDay: _focusedDay,
-                      selectedDay: _selectedDay,
-                      scheduleUpdateCount: _scheduleUpdateCount,
-                      onDaySelected: _onDaySelected,
-                      onPageChanged: (focusedDay) {
-                        setState(() {
-                          _focusedDay = focusedDay;
-                        });
-                      },
-                      eventLoader: _getSchedulesForDay,
-                      hasPendingTasks: _hasPendingTasks,
-                      isAllCompleted: _isAllCompleted,
-                    ),
+                  CalendarHeaderSliver(
+                    focusedDay: _focusedDay,
+                    selectedDay: _selectedDay,
+                    scheduleUpdateCount: _scheduleUpdateCount,
+                    onDaySelected: _onDaySelected,
+                    onPageChanged: (focusedDay) {
+                      final isMonthChanged =
+                          focusedDay.year != _focusedDay.year ||
+                          focusedDay.month != _focusedDay.month;
+                      setState(() {
+                        _focusedDay = focusedDay;
+                      });
+                      if (isMonthChanged) {
+                        _loadSchedules();
+                      }
+                    },
+                    eventLoader: _getSchedulesForDay,
+                    hasPendingTasks: _hasPendingTasks,
+                    isAllCompleted: _isAllCompleted,
                   ),
 
                   // 2. 日程列表
-                  _buildScheduleList(),
+                  CalendarScheduleList(
+                    selectedDay: _selectedDay,
+                    schedules: _selectedDay == null
+                        ? const []
+                        : _getSchedulesForDay(_selectedDay!),
+                    dailyTasks: _dailyTasks,
+                    showDailyTasksInCalendar: _showDailyTasksInCalendar,
+                    isTodaySelected: _isTodaySelected(),
+                    expandedScheduleIds: _expandedScheduleIds,
+                    use24HourFormat: _use24HourFormat,
+                    onCreateSchedule: _showCreateDialog,
+                    onDailyTaskUpdated: _loadSchedules,
+                    onDailyTaskDetails: _showDailyTaskDetails,
+                    onToggleScheduleExpanded: _toggleScheduleExpanded,
+                    onStatusChanged: _handleStatusChange,
+                    onEditSchedule: _showEditDialog,
+                    onDeleteSchedule: _showDeleteConfirmDialog,
+                  ),
 
                   // 底部安全距离
                   const SliverPadding(padding: EdgeInsets.only(bottom: 40)),
@@ -945,378 +961,5 @@ class _CalendarPageState extends State<CalendarPage> {
   //   );
   // }
 
-  // 构建日程列表
-  Widget _buildScheduleList() {
-    if (_selectedDay == null) {
-      return SliverFillRemaining(child: const Center(child: Text('请选择日期')));
-    }
-
-    final schedules = _getSchedulesForDay(_selectedDay!);
-    final hasDailyTasks =
-        _showDailyTasksInCalendar &&
-        _dailyTasks.isNotEmpty &&
-        _isTodaySelected();
-
-    // 如果既没有日程也没有日常任务，显示空状态
-    if (schedules.isEmpty && !hasDailyTasks) {
-      return SliverFillRemaining(child: _buildEmptyState());
-    }
-
-    return SliverList(
-      delegate: SliverChildListDelegate([
-        // 列表标题（仅当有日程时显示）
-        if (schedules.isNotEmpty)
-          Container(
-            padding: const EdgeInsets.all(12),
-            color: Colors.grey[100],
-            child: Row(
-              children: [
-                Text(
-                  '${_selectedDay!.year}年${_selectedDay!.month}月${_selectedDay!.day}日 的日程',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.blue,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    '${schedules.length}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-        // 日常任务卡片（若启用）
-        if (hasDailyTasks) ...[
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Text('今日日常', style: TextStyle(color: Colors.grey[700])),
-          ),
-          ..._dailyTasks.map(
-            (task) => Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: DailyTaskCard(
-                task: task,
-                use24HourFormat: _use24HourFormat,
-                showInfo: false,
-                onTaskUpdated: (_) async {
-                  // 更新后刷新数据
-                  await _loadSchedules();
-                },
-                onDetailsTap: () => _showDailyTaskDetails(task),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
-
-        // 日程卡片列表（仅当有日程时显示）
-        if (schedules.isNotEmpty)
-          ...schedules.map((schedule) {
-            final isExpanded = _expandedScheduleIds.contains(schedule.id);
-
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: ScheduleCard(
-                schedule: schedule,
-                isExpanded: isExpanded,
-                onTap: () => _toggleScheduleExpanded(schedule.id),
-                onStatusChanged: (newStatus) =>
-                    _handleStatusChange(schedule, newStatus),
-                onEdit: () => _showEditDialog(schedule),
-                onDelete: () => _showDeleteConfirmDialog(schedule),
-                use24HourFormat: _use24HourFormat,
-              ),
-            );
-          }),
-      ]),
-    );
-  }
-
-  // 空状态视图
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.event_available, size: 64, color: Colors.grey[400]),
-          const SizedBox(height: 16),
-          const Text(
-            '这一天还没有日程',
-            style: TextStyle(fontSize: 16, color: Colors.grey),
-          ),
-          const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: _showCreateDialog,
-            icon: const Icon(Icons.add),
-            label: const Text('创建日程'),
-          ),
-        ],
-      ),
-    );
-  }
-
   // 错误视图
-}
-
-class _CalendarHeaderDelegate extends SliverPersistentHeaderDelegate {
-  final DateTime focusedDay;
-  final DateTime? selectedDay;
-  final int scheduleUpdateCount;
-  final Function(DateTime, DateTime) onDaySelected;
-  final Function(DateTime) onPageChanged;
-  final List<Schedule> Function(DateTime) eventLoader;
-  final bool Function(DateTime) hasPendingTasks;
-  final bool Function(DateTime) isAllCompleted;
-
-  _CalendarHeaderDelegate({
-    required this.focusedDay,
-    required this.selectedDay,
-    required this.scheduleUpdateCount,
-    required this.onDaySelected,
-    required this.onPageChanged,
-    required this.eventLoader,
-    required this.hasPendingTasks,
-    required this.isAllCompleted,
-  });
-
-  // 常量配置
-  static const double _rowHeight = 52.0;
-  static const double _titleHeight = 40.0;
-  static const double _dayOfWeekHeight = 30.0;
-
-  // !!! 修改点 1: 统一改为 6 行，以兼容所有月份 !!!
-  static const int _showRowsCount = 6;
-
-  static const double _headerTotalHeight = _titleHeight + _dayOfWeekHeight;
-
-  // 最大高度 = 头部 + 6行日期
-  static const double _maxExtent =
-      _headerTotalHeight + (_rowHeight * _showRowsCount) + 10;
-
-  // 最小高度
-  static const double _minExtent = _rowHeight;
-
-  @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) {
-    // 1. 计算需要上移的距离
-    final int selectedRowIndex = _calculateSelectedRowIndex();
-    final double targetSlideUpOffset =
-        _headerTotalHeight + (selectedRowIndex * _rowHeight);
-
-    // 2. 动画进度计算
-    final double shrinkProgress = shrinkOffset / (maxExtent - minExtent);
-    final double clampedProgress = shrinkProgress.clamp(0.0, 1.0);
-    final double currentTranslateY = targetSlideUpOffset * clampedProgress;
-
-    final Color backgroundColor = Theme.of(context).scaffoldBackgroundColor;
-
-    // -----------------------------------------------------------
-    // 新增：计算阴影/边框的不透明度
-    // -----------------------------------------------------------
-    // 只有当收缩进度超过 0% 时才开始显示，完全收缩时达到最大不透明度
-    // 这里的 0.1 是阴影的最大浓度，你可以根据需要调整 (0.0 ~ 1.0)
-    final double shadowOpacity = (clampedProgress * 0.1).clamp(0.0, 1.0);
-
-    // 如果想要边框而不是阴影，用这个透明度
-    // final double borderOpacity = (clampedProgress * 0.15).clamp(0.0, 1.0);
-
-    return Container(
-      decoration: BoxDecoration(
-        color: backgroundColor,
-
-        // 方案 A: 底部阴影 (更有立体感)
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(
-              (shadowOpacity * 255).toInt(),
-            ), // 动态透明度
-            offset: const Offset(0, 2), // 向下偏移 2px
-            blurRadius: 4, // 模糊半径
-            spreadRadius: 0,
-          ),
-        ],
-      ),
-      child: ClipRect(
-        child: OverflowBox(
-          minHeight: maxExtent,
-          maxHeight: maxExtent,
-          alignment: Alignment.topCenter,
-          child: Transform.translate(
-            offset: Offset(0, -currentTranslateY),
-            child: Column(
-              children: [
-                // 1. 标题
-                SizedBox(
-                  height: _titleHeight,
-                  child: Center(
-                    child: Text(
-                      DateFormat.yMMM('zh_CN').format(focusedDay),
-                      style: const TextStyle(
-                        fontSize: 17.0,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-
-                // 2. 星期
-                SizedBox(
-                  height: _dayOfWeekHeight,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
-                        .map(
-                          (day) => Text(
-                            day,
-                            style: TextStyle(
-                              color: Colors.grey[600],
-                              fontSize: 13,
-                            ),
-                          ),
-                        )
-                        .toList(),
-                  ),
-                ),
-
-                // 3. 日历主体
-                SizedBox(
-                  height: _rowHeight * _showRowsCount, // 6行高度
-                  child: TableCalendar<Schedule>(
-                    locale: 'zh_CN',
-                    startingDayOfWeek: StartingDayOfWeek.monday,
-                    firstDay: DateTime.utc(2020, 1, 1),
-                    lastDay: DateTime.utc(2099, 12, 31),
-                    focusedDay: focusedDay,
-                    selectedDayPredicate: (day) => isSameDay(selectedDay, day),
-
-                    calendarFormat: CalendarFormat.month,
-                    shouldFillViewport: true,
-
-                    // !!! 修改点 2: 强制所有月份都渲染成 6 行 !!!
-                    // 这样5行月份的下面会补一行灰色的下月日期，保证高度不跳变
-                    sixWeekMonthsEnforced: true,
-
-                    headerVisible: false,
-                    daysOfWeekVisible: false,
-                    rowHeight: _rowHeight,
-
-                    eventLoader: eventLoader,
-                    onDaySelected: onDaySelected,
-                    onPageChanged: onPageChanged,
-
-                    calendarStyle: const CalendarStyle(
-                      todayDecoration: BoxDecoration(
-                        color: Colors.blueAccent,
-                        shape: BoxShape.circle,
-                      ),
-                      selectedDecoration: BoxDecoration(
-                        color: Colors.blue,
-                        shape: BoxShape.circle,
-                      ),
-                      markersMaxCount: 1,
-                      markerDecoration: BoxDecoration(
-                        color: Colors.red,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    calendarBuilders: CalendarBuilders(
-                      markerBuilder: (context, date, events) {
-                        // 检查是否有未完成的任务
-                        final hasPending = hasPendingTasks(date);
-                        final allCompleted = isAllCompleted(date);
-
-                        // 优先显示红点（有未完成任务）
-                        if (hasPending) {
-                          return Positioned(
-                            bottom: 1,
-                            child: Container(
-                              width: 6,
-                              height: 6,
-                              decoration: const BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.red,
-                              ),
-                            ),
-                          );
-                        }
-
-                        // 如果所有任务都完成，显示绿色线
-                        if (allCompleted) {
-                          return Positioned(
-                            bottom: 1,
-                            child: Container(
-                              width: 20,
-                              height: 3,
-                              decoration: BoxDecoration(
-                                color: Colors.green.withOpacity(0.6),
-                                borderRadius: BorderRadius.circular(1.5),
-                              ),
-                            ),
-                          );
-                        }
-
-                        return null;
-                      },
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // 计算选中日期在当前月份是第几行 (0-5)
-  int _calculateSelectedRowIndex() {
-    if (selectedDay == null) return 0;
-
-    // 这里的逻辑适用于 Monday Start
-    DateTime firstDayOfMonth = DateTime(focusedDay.year, focusedDay.month, 1);
-    int daysDifference = firstDayOfMonth.weekday - 1;
-    DateTime firstVisibleDay = firstDayOfMonth.subtract(
-      Duration(days: daysDifference),
-    );
-
-    int index = selectedDay!.difference(firstVisibleDay).inDays;
-    if (index < 0) return 0;
-
-    int rowIndex = index ~/ 7;
-    // 修改点 3: 允许最大索引为 5 (即第6行)
-    return rowIndex.clamp(0, _showRowsCount - 1);
-  }
-
-  @override
-  double get maxExtent => _maxExtent;
-
-  @override
-  double get minExtent => _minExtent;
-
-  @override
-  bool shouldRebuild(covariant _CalendarHeaderDelegate oldDelegate) {
-    return oldDelegate.focusedDay != focusedDay ||
-        oldDelegate.selectedDay != selectedDay ||
-        oldDelegate.scheduleUpdateCount != scheduleUpdateCount;
-  }
 }

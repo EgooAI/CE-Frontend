@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../models/auth/user.dart';
-import '../../services/core/auth_service.dart';
+import '../../../models/auth/user.dart';
+import '../../../services/core/auth_service.dart';
 
 class EditUsernamePage extends StatefulWidget {
   final User user;

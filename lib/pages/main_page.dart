@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/auth/user.dart';
 import 'chat/chat_page.dart';
 import 'calendar/calendar_page.dart';
-import 'calendar/task_page.dart';
+import 'task/task_page.dart';
 import 'daily/daily_page.dart';
 import 'profile/profile_page.dart';
 

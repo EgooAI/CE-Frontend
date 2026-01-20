@@ -5,10 +5,13 @@ import '../../repositories/schedule_repository.dart';
 import '../../services/core/auth_service.dart';
 import '../../services/schedule/schedule_service.dart';
 import '../../services/sync/sync_queue_service.dart';
-import '../../widgets/schedule/schedule_card.dart';
 import '../../widgets/schedule/create_schedule_bottom_sheet.dart';
 import '../../widgets/common/offline_banner.dart';
 import '../../widgets/common/sync_indicator.dart';
+import '../../widgets/task/task_schedule_type_dropdown.dart';
+import '../../widgets/task/task_error_view.dart';
+import '../../widgets/task/task_batch_action_bar.dart';
+import '../../widgets/task/task_list_view.dart';
 import '../main_page.dart';
 
 /// 任务页面：所有日程的集中显示管理
@@ -103,7 +106,7 @@ class _TaskPageState extends State<TaskPage>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _loadTasks();
+    // 避免重复请求：初始化已加载，这里仅保持配置同步
     _loadConfig();
   }
 
@@ -121,7 +124,8 @@ class _TaskPageState extends State<TaskPage>
 
   Future<void> _loadConfig() async {
     try {
-      final profile = await AuthService().getProfile();
+      final profile = await AuthService().getUser();
+      if (profile == null) return;
       if (!mounted) return;
       setState(() {
         _use24HourFormat = profile.config.use24HourFormat;
@@ -660,7 +664,15 @@ class _TaskPageState extends State<TaskPage>
         // title: const Text('任务'),
         title: _isSelectionMode
             ? Text('已选择 $selectedCount 项')
-            : _buildScheduleTypeDropdown(),
+            : TaskScheduleTypeDropdown(
+                selectedScheduleType: _selectedScheduleType,
+                scheduleTypeOptions: _scheduleTypeOptions,
+                onChanged: (newValue) {
+                  setState(() {
+                    _selectedScheduleType = newValue;
+                  });
+                },
+              ),
         leading: _isSelectionMode
             ? IconButton(
                 icon: const Icon(Icons.close),
@@ -743,7 +755,10 @@ class _TaskPageState extends State<TaskPage>
           // 主体内容
           Expanded(
             child: _errorMessage != null
-                ? _buildErrorView()
+                ? TaskErrorView(
+                    message: _errorMessage ?? '加载失败',
+                    onRetry: _loadTasks,
+                  )
                 : Stack(
                     children: [
                       TabBarView(
@@ -763,7 +778,10 @@ class _TaskPageState extends State<TaskPage>
                           left: 0,
                           right: 0,
                           bottom: 0,
-                          child: _buildBatchActionBar(),
+                          child: TaskBatchActionBar(
+                            selectedCount: _selectedTaskIds.length,
+                            onDelete: _showBatchDeleteConfirmDialog,
+                          ),
                         ),
                     ],
                   ),
@@ -779,201 +797,29 @@ class _TaskPageState extends State<TaskPage>
     );
   }
 
-  Widget _buildScheduleTypeDropdown() {
-    return Container(
-      decoration: BoxDecoration(
-        color:
-            Theme.of(context).appBarTheme.backgroundColor ?? Colors.transparent,
-        borderRadius: BorderRadius.circular(12.0),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          padding: const EdgeInsets.all(8),
-          value: _selectedScheduleType,
-          isDense: true,
-          style: Theme.of(context).appBarTheme.titleTextStyle,
-          icon: Icon(
-            Icons.arrow_drop_down,
-            color: Theme.of(context).appBarTheme.iconTheme?.color,
-          ),
-          focusColor: Colors.white.withValues(alpha: 0),
-          borderRadius: BorderRadius.circular(12.0),
-          dropdownColor: Colors.white,
-
-          items: _scheduleTypeOptions.entries.map((entry) {
-            return DropdownMenuItem<String>(
-              value: entry.key,
-              child: Text(
-                entry.value,
-                style: const TextStyle(color: Colors.black, fontSize: 16),
-              ),
-            );
-          }).toList(),
-
-          onChanged: (newValue) {
-            if (newValue != null) {
-              setState(() {
-                _selectedScheduleType = newValue;
-              });
-            }
-          },
-        ),
-      ),
-    );
-  }
-
   // 构建任务列表
   Widget _buildTaskList(String status, List<Schedule> tasksToFilter) {
     final tasks = _getTasksByStatus(status, tasksToFilter);
 
-    if (tasks.isEmpty) {
-      return _buildEmptyState(status);
-    }
-
-    return ListView.builder(
-      padding: EdgeInsets.fromLTRB(
-        12,
-        12,
-        12,
-        _isSelectionMode && _selectedTaskIds.isNotEmpty ? 80 : 12,
-      ),
-      itemCount: tasks.length,
-      itemBuilder: (context, index) {
-        final task = tasks[index];
-        final isExpanded = _expandedTaskIds.contains(task.id);
-        final isSelected =
-            _isSelectionMode && _selectedTaskIds.contains(task.id);
-
-        if (_isSelectionMode) {
-          // 选择模式：带复选框的简化卡片
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: InkWell(
-              onTap: () => _toggleTaskSelection(task.id),
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border.all(
-                    color: isSelected ? Colors.blue : Colors.grey.shade300,
-                    width: isSelected ? 2 : 1,
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    if (isSelected)
-                      BoxShadow(
-                        color: Colors.blue.withOpacity(0.2),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                  ],
-                ),
-                child: ListTile(
-                  leading: Checkbox(
-                    value: isSelected,
-                    onChanged: (_) => _toggleTaskSelection(task.id),
-                  ),
-                  title: Text(
-                    task.title,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 4),
-                      Text(
-                        _formatDateTime(task.startTime),
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                      if (task.description != null) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          task.description!,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ],
-                  ),
-                  trailing: _buildStatusBadge(task.status),
-                ),
-              ),
-            ),
-          );
-        } else {
-          // 普通模式：正常卡片
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: ScheduleCard(
-              schedule: task,
-              isExpanded: isExpanded,
-              onTap: () => _toggleTaskExpanded(task.id),
-              onStatusChanged: (newStatus) =>
-                  _handleStatusChange(task, newStatus),
-              onEdit: () => _showEditDialog(task),
-              onDelete: () => _showDeleteConfirmDialog(task),
-              use24HourFormat: _use24HourFormat,
-            ),
-          );
-        }
-      },
-    );
-  }
-
-  // 空状态视图
-  Widget _buildEmptyState(String status) {
     final emptyInfo = _getEmptyInfo(status);
 
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(emptyInfo.icon, size: 64, color: Colors.grey[400]),
-          const SizedBox(height: 16),
-          Text(
-            emptyInfo.message,
-            style: const TextStyle(fontSize: 16, color: Colors.grey),
-          ),
-          if (status == 'pending' || status == 'upcoming') ...[
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _showCreateDialog,
-              icon: const Icon(Icons.add),
-              label: const Text('创建任务'),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  // 错误视图
-  Widget _buildErrorView() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.error_outline, size: 64, color: Colors.red),
-          const SizedBox(height: 16),
-          Text(
-            _errorMessage ?? '加载失败',
-            style: const TextStyle(fontSize: 16, color: Colors.red),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: _loadTasks,
-            icon: const Icon(Icons.refresh),
-            label: const Text('重试'),
-          ),
-        ],
-      ),
+    return TaskListView(
+      tasks: tasks,
+      isSelectionMode: _isSelectionMode,
+      selectedTaskIds: _selectedTaskIds,
+      expandedTaskIds: _expandedTaskIds,
+      use24HourFormat: _use24HourFormat,
+      emptyIcon: emptyInfo.icon,
+      emptyMessage: emptyInfo.message,
+      showCreateButton: status == 'pending' || status == 'upcoming',
+      onCreate: _showCreateDialog,
+      onToggleTaskSelection: _toggleTaskSelection,
+      onToggleTaskExpanded: _toggleTaskExpanded,
+      onStatusChanged: _handleStatusChange,
+      onEdit: _showEditDialog,
+      onDelete: _showDeleteConfirmDialog,
+      formatDateTime: _formatDateTime,
+      buildStatusBadge: _buildStatusBadge,
     );
   }
 
@@ -1011,60 +857,6 @@ class _TaskPageState extends State<TaskPage>
       default:
         return EmptyInfo(icon: Icons.inbox, message: '暂无任务');
     }
-  }
-
-  // 批量操作底部栏
-  Widget _buildBatchActionBar() {
-    final selectedCount = _selectedTaskIds.length;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: SafeArea(
-        top: false,
-        child: Row(
-          children: [
-            Icon(Icons.info_outline, size: 20, color: Colors.grey[600]),
-            const SizedBox(width: 8),
-            Text(
-              '已选择 $selectedCount 项',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[700],
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const Spacer(),
-            ElevatedButton.icon(
-              onPressed: selectedCount > 0
-                  ? _showBatchDeleteConfirmDialog
-                  : null,
-              icon: const Icon(Icons.delete_outline, size: 20),
-              label: const Text('批量删除'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-                disabledBackgroundColor: Colors.grey[300],
-                disabledForegroundColor: Colors.grey[600],
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 12,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   // 格式化日期时间

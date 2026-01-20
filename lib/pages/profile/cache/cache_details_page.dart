@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import '../../models/sync/sync_task.dart';
-import '../../services/cache/cache_keys.dart';
+import '../../../models/sync/sync_task.dart';
+import '../../../services/cache/cache_keys.dart';
 
 /// 缓存详情页面
 ///

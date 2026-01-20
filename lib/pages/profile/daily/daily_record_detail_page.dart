@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../models/daily/daily_task.dart';
-import '../../services/daily/daily_task_service.dart';
+import '../../../models/daily/daily_task.dart';
+import '../../../services/daily/daily_task_service.dart';
 
 /// 日常任务详细记录页面
 class DailyRecordDetailPage extends StatefulWidget {

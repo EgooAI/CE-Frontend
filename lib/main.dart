@@ -7,13 +7,13 @@ import 'package:workmanager/workmanager.dart';
 import 'package:shorebird_code_push/shorebird_code_push.dart';
 import 'pages/auth/login_page.dart';
 import 'pages/main_page.dart';
-import 'pages/profile/edit_email_page.dart';
-import 'pages/profile/edit_username_page.dart';
-import 'pages/profile/edit_password_page.dart';
+import 'pages/profile/user/edit_email_page.dart';
+import 'pages/profile/user/edit_username_page.dart';
+import 'pages/profile/user/edit_password_page.dart';
 import 'pages/reminders/reminders_page.dart'; // ignore: unused_import
-import 'pages/calendar/recurring_schedules_page.dart';
-import 'pages/profile/cache_management_page.dart';
-import 'pages/daily/daily_records_page.dart';
+import 'pages/profile/recurrence/recurring_schedules_page.dart';
+import 'pages/profile/cache/cache_management_page.dart';
+import 'pages/profile/daily/daily_records_page.dart';
 import 'services/core/auth_service.dart';
 import 'services/core/api_client.dart';
 import 'services/sync/sync_scheduler.dart';
@@ -180,19 +180,19 @@ class _MyAppState extends State<MyApp> {
         });
       }
 
-      // 如果已登录，尝试获取最新用户信息
-      try {
-        final user = await authService.getProfile();
-        if (mounted) {
-          setState(() {
-            _isLoggedIn = true;
-            _user = user;
-            _isLoading = false;
-          });
-        }
-      } catch (e) {
-        // 如果获取用户信息失败且没有缓存，清除token并跳转到登录页
-        if (cachedUser == null) {
+      // 如果没有缓存用户，再获取一次最新信息
+      if (cachedUser == null) {
+        try {
+          final user = await authService.getProfile();
+          if (mounted) {
+            setState(() {
+              _isLoggedIn = true;
+              _user = user;
+              _isLoading = false;
+            });
+          }
+        } catch (e) {
+          // 如果获取用户信息失败且没有缓存，清除token并跳转到登录页
           await authService.logout();
           if (mounted) {
             setState(() {
