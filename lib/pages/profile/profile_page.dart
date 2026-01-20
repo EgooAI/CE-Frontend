@@ -20,6 +20,8 @@ class _ProfilePageState extends State<ProfilePage> {
   late User user;
   String? _patchVersion;
   String? _appVersion;
+  bool _isUpdatingPatch = false;
+  String _patchUpdateMessage = '检查并下载补丁';
   final _shorebirdUpdater = ShorebirdUpdater();
 
   @override
@@ -48,6 +50,51 @@ class _ProfilePageState extends State<ProfilePage> {
       setState(() {
         _patchVersion = '未启用';
       });
+    }
+  }
+
+  Future<void> _checkAndUpdatePatch() async {
+    if (kIsWeb || kDebugMode || !_shorebirdUpdater.isAvailable) {
+      showAppSnackBar(context, const SnackBar(content: Text('当前环境不支持补丁更新')));
+      return;
+    }
+
+    if (_isUpdatingPatch) return;
+    setState(() {
+      _isUpdatingPatch = true;
+      _patchUpdateMessage = '正在检查更新...';
+    });
+
+    try {
+      final status = await _shorebirdUpdater.checkForUpdate();
+      if (status == UpdateStatus.upToDate) {
+        setState(() {
+          _patchUpdateMessage = '已是最新版本';
+        });
+        return;
+      }
+
+      setState(() {
+        _patchUpdateMessage = '正在下载更新...';
+      });
+
+      await _shorebirdUpdater.update();
+
+      final nextPatch = await _shorebirdUpdater.readNextPatch();
+      setState(() {
+        _patchVersion = nextPatch?.number.toString() ?? _patchVersion;
+        _patchUpdateMessage = '更新已下载，重启应用生效';
+      });
+    } catch (e) {
+      setState(() {
+        _patchUpdateMessage = '更新失败：$e';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUpdatingPatch = false;
+        });
+      }
     }
   }
 
@@ -305,6 +352,42 @@ class _ProfilePageState extends State<ProfilePage> {
                       Navigator.pushNamed(context, '/cache-management'),
                 ),
               ]),
+              if (!kIsWeb)
+                Column(
+                  children: [
+                    const SizedBox(height: 12),
+                    _buildSectionCard([
+                      ListTile(
+                        leading: _buildIconAvatar(
+                          Icons.system_update,
+                          const Color(0xFF5B8CFF),
+                        ),
+                        title: const Text('手动获取更新'),
+                        subtitle: Text(
+                          _patchUpdateMessage,
+                          style: const TextStyle(color: Color(0xFF8A8F98)),
+                        ),
+                        trailing: _isUpdatingPatch
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : TextButton(
+                                onPressed: _checkAndUpdatePatch,
+                                child: const Text('检查更新'),
+                              ),
+                      ),
+                      if (_isUpdatingPatch)
+                        const Padding(
+                          padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+                          child: LinearProgressIndicator(minHeight: 3),
+                        ),
+                    ]),
+                  ],
+                ),
               const SizedBox(height: 16),
               Column(
                 children: [
