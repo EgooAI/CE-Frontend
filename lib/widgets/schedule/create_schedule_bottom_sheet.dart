@@ -435,7 +435,7 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
       child: Container(
         height: MediaQuery.of(context).size.height * 0.85,
         decoration: const BoxDecoration(
-          color: Colors.white,
+          color: Color(0xFFF6F7F9),
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
@@ -481,37 +481,40 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
                         ),
                         const SizedBox(height: 16),
                       ],
-                      _buildTitleField(),
-                      const SizedBox(height: 16),
-                      _buildDateTimeSection(),
-                      const SizedBox(height: 16),
-                      _buildLocationField(),
-                      const SizedBox(height: 16),
-                      _buildRemindBeforeField(),
-                      const SizedBox(height: 16),
-                      _buildAllDaySwitch(),
-                      const SizedBox(height: 16),
-                      _buildStatusSection(),
-                      const SizedBox(height: 16),
-                      _buildPrioritySection(),
-                      const SizedBox(height: 16),
-                      _buildTypeSection(),
-                      const SizedBox(height: 16),
-                      _buildParticipantsField(),
-                      const SizedBox(height: 16),
-                      _buildDescriptionField(),
-                      const SizedBox(height: 16),
-                      _buildNotesField(),
-                      const SizedBox(height: 16),
-                      // 重复规则编辑器
-                      RecurrenceEditor(
-                        initialRule: _recurrenceRule,
-                        onChanged: (rule) {
-                          setState(() {
-                            _recurrenceRule = rule;
-                          });
-                        },
-                      ),
+                      _buildGroupCard([
+                        _buildTitleField(),
+                        const SizedBox(height: 16),
+                        _buildDateTimeSection(),
+                        const SizedBox(height: 16),
+                        _buildRemindBeforeField(),
+                        const SizedBox(height: 16),
+                        _buildAllDaySwitch(),
+                      ]),
+                      _buildGroupCard([
+                        _buildStatusSection(),
+                        const SizedBox(height: 12),
+                        _buildPrioritySection(),
+                        const SizedBox(height: 12),
+                        _buildTypeSection(),
+                      ]),
+                      _buildGroupCard([
+                        _buildLocationField(),
+                        const SizedBox(height: 12),
+                        _buildParticipantsField(),
+                        const SizedBox(height: 12),
+                        _buildDescriptionField(),
+                        const SizedBox(height: 12),
+                        _buildNotesField(),
+                        const SizedBox(height: 12),
+                        RecurrenceEditor(
+                          initialRule: _recurrenceRule,
+                          onChanged: (rule) {
+                            setState(() {
+                              _recurrenceRule = rule;
+                            });
+                          },
+                        ),
+                      ]),
                     ],
                   ),
                 ),
@@ -530,6 +533,7 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
+        color: Colors.white,
         border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
       ),
       child: Row(
@@ -551,11 +555,7 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
   Widget _buildTitleField() {
     return TextFormField(
       controller: _titleController,
-      decoration: const InputDecoration(
-        labelText: '标题 *',
-        border: OutlineInputBorder(),
-        prefixIcon: Icon(Icons.title),
-      ),
+      decoration: _inputDecoration(label: '标题 *', icon: Icons.title),
       onChanged: (_) => setState(() {}),
     );
   }
@@ -568,11 +568,7 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
         GestureDetector(
           onTap: () => _selectDateTime(context, true),
           child: InputDecorator(
-            decoration: const InputDecoration(
-              labelText: '开始时间 *',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.event),
-            ),
+            decoration: _inputDecoration(label: '开始时间 *', icon: Icons.event),
             child: Text(
               _startTime != null ? _formatDateTime(_startTime!) : '请选择开始时间',
               style: TextStyle(
@@ -587,10 +583,9 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
         GestureDetector(
           onTap: () => _selectDateTime(context, false),
           child: InputDecorator(
-            decoration: InputDecoration(
-              labelText: '结束时间（可选）',
-              border: const OutlineInputBorder(),
-              prefixIcon: const Icon(Icons.event_available),
+            decoration: _inputDecoration(
+              label: '结束时间（可选）',
+              icon: Icons.event_available,
               suffixIcon: _endTime != null
                   ? IconButton(
                       icon: const Icon(Icons.clear, size: 20),
@@ -623,11 +618,10 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
   Widget _buildDescriptionField() {
     return TextFormField(
       controller: _descriptionController,
-      decoration: const InputDecoration(
-        labelText: '描述',
-        border: OutlineInputBorder(),
-        prefixIcon: Icon(Icons.description),
-      ),
+      decoration: _inputDecoration(
+        label: '描述',
+        icon: Icons.description,
+      ).copyWith(alignLabelWithHint: true),
       maxLines: 3,
     );
   }
@@ -635,11 +629,7 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
   Widget _buildLocationField() {
     return TextFormField(
       controller: _locationController,
-      decoration: const InputDecoration(
-        labelText: '地点',
-        border: OutlineInputBorder(),
-        prefixIcon: Icon(Icons.location_on),
-      ),
+      decoration: _inputDecoration(label: '地点', icon: Icons.location_on),
     );
   }
 
@@ -653,29 +643,44 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
           spacing: 8,
           children: [
             ChoiceChip(
-              label: const Text('待办'),
+              label: _buildChipLabel('待办', selected: _status == 'pending'),
               selected: _status == 'pending',
               onSelected: (_) => setState(() => _status = 'pending'),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             ChoiceChip(
-              label: const Text('进行中'),
+              label: _buildChipLabel('进行中', selected: _status == 'in_progress'),
               selected: _status == 'in_progress',
               onSelected: (_) => setState(() => _status = 'in_progress'),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             ChoiceChip(
-              label: const Text('已完成'),
+              label: _buildChipLabel('已完成', selected: _status == 'completed'),
               selected: _status == 'completed',
               onSelected: (_) => setState(() => _status = 'completed'),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             ChoiceChip(
-              label: const Text('已取消'),
+              label: _buildChipLabel('已取消', selected: _status == 'cancelled'),
               selected: _status == 'cancelled',
               onSelected: (_) => setState(() => _status = 'cancelled'),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             ChoiceChip(
-              label: const Text('未完成'),
+              label: _buildChipLabel('未完成', selected: _status == 'failed'),
               selected: _status == 'failed',
               onSelected: (_) => setState(() => _status = 'failed'),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
           ],
         ),
@@ -693,25 +698,34 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
           spacing: 8,
           children: [
             ChoiceChip(
-              label: const Text('低'),
+              label: _buildChipLabel('低', selected: _priority == 'low'),
               selected: _priority == 'low',
               onSelected: (_) => setState(() => _priority = 'low'),
               backgroundColor: Colors.green.shade100,
               selectedColor: Colors.green,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             ChoiceChip(
-              label: const Text('中'),
+              label: _buildChipLabel('中', selected: _priority == 'medium'),
               selected: _priority == 'medium',
               onSelected: (_) => setState(() => _priority = 'medium'),
               backgroundColor: Colors.orange.shade100,
               selectedColor: Colors.orange,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             ChoiceChip(
-              label: const Text('高'),
+              label: _buildChipLabel('高', selected: _priority == 'high'),
               selected: _priority == 'high',
               onSelected: (_) => setState(() => _priority = 'high'),
               backgroundColor: Colors.red.shade100,
               selectedColor: Colors.red,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
           ],
         ),
@@ -729,40 +743,40 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
           spacing: 8,
           children: [
             ChoiceChip(
-              label: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.event, size: 16),
-                  SizedBox(width: 4),
-                  Text('会议'),
-                ],
+              label: _buildChipLabel(
+                '会议',
+                selected: _type == 'meeting',
+                leading: const Icon(Icons.event, size: 16),
               ),
               selected: _type == 'meeting',
               onSelected: (_) => setState(() => _type = 'meeting'),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             ChoiceChip(
-              label: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.task, size: 16),
-                  SizedBox(width: 4),
-                  Text('任务'),
-                ],
+              label: _buildChipLabel(
+                '任务',
+                selected: _type == 'task',
+                leading: const Icon(Icons.task, size: 16),
               ),
               selected: _type == 'task',
               onSelected: (_) => setState(() => _type = 'task'),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             ChoiceChip(
-              label: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.celebration, size: 16),
-                  SizedBox(width: 4),
-                  Text('活动'),
-                ],
+              label: _buildChipLabel(
+                '活动',
+                selected: _type == 'event',
+                leading: const Icon(Icons.celebration, size: 16),
               ),
               selected: _type == 'event',
               onSelected: (_) => setState(() => _type = 'event'),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
           ],
         ),
@@ -773,11 +787,10 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
   Widget _buildParticipantsField() {
     return TextFormField(
       controller: _participantsController,
-      decoration: const InputDecoration(
-        labelText: '参与者',
-        hintText: '多个参与者用逗号分隔',
-        border: OutlineInputBorder(),
-        prefixIcon: Icon(Icons.people),
+      decoration: _inputDecoration(
+        label: '参与者',
+        hint: '多个参与者用逗号分隔',
+        icon: Icons.people,
       ),
     );
   }
@@ -785,11 +798,10 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
   Widget _buildNotesField() {
     return TextFormField(
       controller: _notesController,
-      decoration: const InputDecoration(
-        labelText: '备注',
-        border: OutlineInputBorder(),
-        prefixIcon: Icon(Icons.note),
-      ),
+      decoration: _inputDecoration(
+        label: '备注',
+        icon: Icons.note,
+      ).copyWith(alignLabelWithHint: true),
       maxLines: 2,
     );
   }
@@ -810,15 +822,12 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('提前提醒', style: TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 8),
         DropdownButtonFormField<int?>(
           key: ValueKey('remind_$dropdownValue'), // 使用 dropdownValue 作为 key
           value: dropdownValue,
-          decoration: const InputDecoration(
-            border: OutlineInputBorder(),
-            prefixIcon: Icon(Icons.notifications),
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: _inputDecoration(
+            label: '提前提醒',
+            icon: Icons.notifications,
           ),
           items: [
             const DropdownMenuItem(value: null, child: Text('默认提醒 (15分钟)')),
@@ -965,6 +974,73 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
           ),
         ],
       ),
+    );
+  }
+
+  InputDecoration _inputDecoration({
+    required String label,
+    IconData? icon,
+    String? hint,
+    Widget? suffixIcon,
+  }) {
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      prefixIcon: icon != null ? Icon(icon) : null,
+      suffixIcon: suffixIcon,
+      filled: true,
+      fillColor: Colors.white,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: Color(0xFF1F2329), width: 1),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+    );
+  }
+
+  Widget _buildGroupCard(List<Widget> children) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0F000000),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children,
+      ),
+    );
+  }
+
+  Widget _buildChipLabel(
+    String text, {
+    required bool selected,
+    Widget? leading,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (selected)
+          const Padding(
+            padding: EdgeInsets.only(right: 4),
+            child: Icon(Icons.check, size: 14),
+          ),
+        if (leading != null) ...[leading, const SizedBox(width: 4)],
+        Text(text),
+      ],
     );
   }
 }

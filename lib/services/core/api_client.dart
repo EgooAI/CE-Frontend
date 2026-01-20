@@ -115,7 +115,10 @@ class ApiClient {
                   error.requestOptions.path.contains('/login') ||
                   error.requestOptions.path.contains('/register')) {
                 print('ApiClient: 认证接口返回 401，跳过刷新');
-                _handleUnauthorized(error);
+                if (!error.requestOptions.path.contains('/login') &&
+                    !error.requestOptions.path.contains('/register')) {
+                  _handleUnauthorized(error);
+                }
                 handler.next(error);
                 return;
               }

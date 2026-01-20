@@ -9,10 +9,9 @@ import '../../repositories/schedule_repository.dart';
 import '../../services/sync/sync_queue_service.dart';
 import '../../widgets/schedule/create_schedule_bottom_sheet.dart';
 import '../../widgets/common/offline_banner.dart';
-import '../../widgets/common/sync_indicator.dart';
-import '../../widgets/chat/message_bubble.dart';
+// import '../../widgets/chat/message_bubble.dart';
 import '../../widgets/chat/conversation_drawer.dart';
-import '../../widgets/chat/welcome_guide.dart';
+// import '../../widgets/chat/welcome_guide.dart';
 import '../../widgets/chat/chat_input_bar.dart';
 import '../../widgets/chat/message_list_view.dart';
 import '../../services/chat/voice_input_service.dart';
@@ -42,7 +41,6 @@ class _ChatPageState extends State<ChatPage> {
   StreamSubscription? _streamSub;
   bool _isLoading = false;
   bool _isSending = false;
-  bool _isSyncing = false;
   int _pendingCount = 0;
 
   // 语音识别相关
@@ -118,6 +116,40 @@ class _ChatPageState extends State<ChatPage> {
     }
 
     setState(() {});
+  }
+
+  Future<void> _startListening() async {
+    final success = await _voiceInput.startListening(
+      onResult: (text, isFinal) {
+        if (mounted) {
+          setState(() {
+            _controller.text = text;
+          });
+        }
+      },
+    );
+
+    if (!success && !_voiceInput.isListening) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Web 平台语音识别功能开发中，请使用文字输入'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _stopListening() async {
+    await _voiceInput.stopListening();
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   Future<void> _loadConversations() async {
@@ -747,12 +779,6 @@ class _ChatPageState extends State<ChatPage> {
             onPressed: () => _createNewConversation(),
             tooltip: '新建对话',
           ),
-          // 同步状态指示器
-          if (_isSyncing)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12),
-              child: SyncIndicator(isSyncing: true, size: 20),
-            ),
         ],
       ),
       drawer: ConversationDrawer(
@@ -801,6 +827,8 @@ class _ChatPageState extends State<ChatPage> {
             isSending: _isSending,
             onSend: _sendMessage,
             onToggleListening: _toggleListening,
+            onStartListening: _startListening,
+            onStopListening: _stopListening,
           ),
         ],
       ),

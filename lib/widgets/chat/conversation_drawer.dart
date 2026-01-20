@@ -1,3 +1,6 @@
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../../models/chat/conversation.dart';
 
@@ -168,31 +171,137 @@ class ConversationDrawer extends StatelessWidget {
     int index,
   ) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 2.0),
-      child: ListTile(
-        title: Text(conversation.title),
-        subtitle: Text(conversation.updatedAt.toString().split('.')[0]),
-        selected: currentConversation?.id == conversation.id,
-        selectedTileColor: Colors.grey[300],
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(8)),
-        ),
-        onTap: () => onSelectConversation(conversation, closeDrawer: true),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.edit, size: 16),
-              onPressed: () => onEditConversationTitle(conversation, index),
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete, size: 16),
-              onPressed: () =>
-                  _handleDeleteConversation(context, conversation, index),
-            ),
-          ],
+      padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 0.0),
+      child: GestureDetector(
+        onLongPress: () =>
+            _showConversationActions(context, conversation, index),
+        child: ListTile(
+          title: Text(conversation.title),
+          subtitle: Text(conversation.updatedAt.toString().split('.')[0]),
+          selected: currentConversation?.id == conversation.id,
+          selectedTileColor: Colors.grey[300],
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(8)),
+          ),
+          onTap: () => onSelectConversation(conversation, closeDrawer: true),
         ),
       ),
+    );
+  }
+
+  Future<void> _showConversationActions(
+    BuildContext context,
+    Conversation conversation,
+    int index,
+  ) async {
+    final isIOS = !kIsWeb && Platform.isIOS;
+
+    if (isIOS) {
+      await showCupertinoModalPopup<void>(
+        context: context,
+        builder: (context) => CupertinoActionSheet(
+          title: Text(conversation.title),
+          actions: [
+            CupertinoActionSheetAction(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('置顶'),
+            ),
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.pop(context);
+                onEditConversationTitle(conversation, index);
+              },
+              child: const Text('编辑对话名称'),
+            ),
+            CupertinoActionSheetAction(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('分享对话'),
+            ),
+            CupertinoActionSheetAction(
+              isDestructiveAction: true,
+              onPressed: () {
+                Navigator.pop(context);
+                _handleDeleteConversation(context, conversation, index);
+              },
+              child: const Text('从对话列表删除'),
+            ),
+          ],
+          cancelButton: CupertinoActionSheetAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+        ),
+      );
+      return;
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return SafeArea(
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x14000000),
+                  blurRadius: 12,
+                  offset: Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 8),
+                Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE5E7EB),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ListTile(
+                  leading: const Icon(Icons.push_pin_outlined),
+                  title: const Text('置顶'),
+                  onTap: () => Navigator.pop(context),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.edit_outlined),
+                  title: const Text('编辑对话名称'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    onEditConversationTitle(conversation, index);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.share_outlined),
+                  title: const Text('分享对话'),
+                  onTap: () => Navigator.pop(context),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.delete_outline, color: Colors.red),
+                  title: const Text(
+                    '从对话列表删除',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _handleDeleteConversation(context, conversation, index);
+                  },
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

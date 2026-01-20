@@ -710,6 +710,9 @@ class _TaskPageState extends State<TaskPage>
           controller: _tabController,
           isScrollable: true,
           tabAlignment: TabAlignment.start,
+          labelColor: const Color(0xFF1F2329),
+          unselectedLabelColor: const Color(0xFF9AA0A6),
+          indicatorColor: const Color(0xFF1F2329),
           tabs: _tabs.map((tab) {
             // final tasks = _getTasksByStatus(tab.status);
             final tasks = _getTasksByStatus(

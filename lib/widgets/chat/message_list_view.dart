@@ -75,7 +75,7 @@ class _MessageListViewState extends State<MessageListView> {
       onNotification: _handleScrollNotification,
       child: ListView.builder(
         controller: widget.scrollController,
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
         itemCount: widget.messages.length,
         itemBuilder: (context, index) {
           final message = widget.messages[index];

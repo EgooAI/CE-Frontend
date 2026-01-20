@@ -57,11 +57,30 @@ class AuthService {
       debugPrint('❌ 登录 DioException: ${e.message}');
       debugPrint('❌ 响应状态码: ${e.response?.statusCode}');
       debugPrint('❌ 响应体: ${e.response?.data}');
-      throw Exception(e.message ?? '登录失败');
+      throw Exception(_mapLoginErrorMessage(e));
     } catch (e) {
       debugPrint('❌ 登录异常: $e');
       throw Exception('登录失败: $e');
     }
+  }
+
+  String _mapLoginErrorMessage(DioException e) {
+    final status = e.response?.statusCode;
+    if (status == 401) {
+      return '用户名或密码错误';
+    }
+
+    final data = e.response?.data;
+    if (data is Map<String, dynamic>) {
+      final message = data['message'] ?? data['error'] ?? data['detail'];
+      if (message is String && message.isNotEmpty) {
+        return message;
+      }
+    } else if (data is String && data.isNotEmpty) {
+      return data;
+    }
+
+    return e.message ?? '登录失败';
   }
 
   Future<AuthResponse> register(
