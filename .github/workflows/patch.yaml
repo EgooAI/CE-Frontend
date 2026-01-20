@@ -64,6 +64,7 @@ jobs:
         run: |
           shorebird patch android \
             --release-version=${{ inputs.release-version }} \
+            --allow-asset-diffs \
             -- --target-platform android-arm64 \
             --dart-define=API_URL=${{ secrets.API_URL }} \
             --dart-define=XFYUN_APP_ID=${{ secrets.XFYUN_APP_ID }} \
@@ -117,6 +118,7 @@ jobs:
         run: |
           shorebird patch ios \
             --release-version=${{ inputs.release-version }} \
+            --allow-asset-diffs \
             -- --no-codesign \
             --dart-define=API_URL=${{ secrets.API_URL }} \
             --dart-define=XFYUN_APP_ID=${{ secrets.XFYUN_APP_ID }} \
