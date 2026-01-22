@@ -131,6 +131,3 @@ lib/
 - [科大讯飞语音识别集成指南](.github/xfyun-voice-integration.md)
 - [项目开发指导](.github/copilot-instructions.md)
 
-## 许可证
-
-MIT License
