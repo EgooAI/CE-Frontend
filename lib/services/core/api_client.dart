@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'auth_service.dart';
+import '../cache/conditional_request_service.dart';
 
 /// API 统一响应格式
 class ApiResponse<T> {
@@ -55,7 +56,10 @@ class ApiClient {
 
   static Dio get instance {
     if (!_interceptorAdded) {
-      // 响应拦截器：处理统一响应格式
+      // 1. 条件请求拦截器（If-Modified-Since / Last-Modified）
+      _dio.interceptors.add(ConditionalRequestService.getInterceptor());
+
+      // 2. 响应拦截器：处理统一响应格式
       _dio.interceptors.add(
         InterceptorsWrapper(
           onResponse: (response, handler) {

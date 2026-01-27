@@ -65,6 +65,12 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
   }
 
   void _initializeData() {
+    String _stringify(dynamic value) {
+      if (value == null) return '';
+      if (value is String) return value;
+      return jsonEncode(value);
+    }
+
     if (widget.existingSchedule != null) {
       // 编辑模式：加载现有数据
       final schedule = widget.existingSchedule!;
@@ -111,11 +117,11 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
     } else if (widget.initialData != null) {
       // AI 预填充模式
       final data = widget.initialData!;
-      _titleController.text = data['title'] ?? '';
-      _descriptionController.text = data['description'] ?? '';
-      _locationController.text = data['location'] ?? '';
-      _notesController.text = data['notes'] ?? '';
-      _participantsController.text = data['participants'] ?? '';
+      _titleController.text = _stringify(data['title']);
+      _descriptionController.text = _stringify(data['description']);
+      _locationController.text = _stringify(data['location']);
+      _notesController.text = _stringify(data['notes']);
+      _participantsController.text = _stringify(data['participants']);
       if (data['startTime'] != null) {
         // DateTime.parse() 会将带时区的时间转换为 UTC
         // 需要使用 .toLocal() 转换回本地时区，保持正确的日期

@@ -4,6 +4,7 @@ import '../models/chat/conversation.dart';
 import '../models/sync/sync_task.dart';
 import '../services/cache/cache_service.dart';
 import '../services/cache/cache_keys.dart';
+import '../services/cache/conditional_request_service.dart';
 import '../services/chat/conversation_service.dart';
 import '../services/sync/sync_queue_service.dart';
 import '../utils/service_locator.dart';
@@ -34,30 +35,77 @@ class ConversationRepository {
   /// 2. 如果缓存有效，直接返回
   /// 3. 如果缓存无效，请求 API 并更新缓存
   /// 4. 如果 API 请求失败，尝试返回过期缓存（降级方案）
-  Future<List<Conversation>> getConversations() async {
+  ///
+  /// 参数：
+  /// - [forceRefresh] 强制刷新，跳过缓存直接请求 API（默认 false）
+  Future<List<Conversation>> getConversations({
+    bool forceRefresh = false,
+  }) async {
     final cacheKey = CacheKeys.conversations;
 
     try {
-      // 1. 尝试读取缓存
-      final cachedConversations = await _cache.getList<Conversation>(cacheKey);
-      final isCacheValid =
-          cachedConversations.isNotEmpty && !(await _cache.isExpired(cacheKey));
+      final cacheTimestamp = await _cache.getTimestamp(cacheKey);
+      final isCacheExpired = await _cache.isExpired(cacheKey);
 
-      if (isCacheValid) {
+      if (forceRefresh) {
+        print('[ConversationRepository] 🔄 强制刷新，不发送 If-Modified-Since');
+        final response = await _service.getConversationsWithResponse(
+          skipConditionalRequest: true,
+        );
+        final data = response.data is List ? response.data : [];
+        final conversations = (data as List)
+            .map((e) => Conversation.fromJson(e as Map<String, dynamic>))
+            .toList();
+        await _cache.setList(cacheKey, conversations);
+        return conversations;
+      }
+
+      // 1. 非强刷且 TTL 未过期，直接返回缓存（可能是空列表）
+      if (!forceRefresh && cacheTimestamp != null && !isCacheExpired) {
+        final cachedConversations = await _cache.getList<Conversation>(
+          cacheKey,
+        );
         print(
-          '[ConversationRepository] 命中缓存: $cacheKey, 数量: ${cachedConversations.length}',
+          '[ConversationRepository] ✅ TTL 命中: $cacheKey, 数量: ${cachedConversations.length}',
         );
         return cachedConversations;
       }
 
-      // 2. 缓存无效，请求 API
-      print('[ConversationRepository] 缓存未命中，请求 API: $cacheKey');
-      final conversations = await _service.getConversations();
+      // 2. TTL 过期但缓存存在 → 使用条件请求判断是否需要更新
+      if (cacheTimestamp != null) {
+        final cachedConversations = await _cache.getList<Conversation>(
+          cacheKey,
+        );
+        print('[ConversationRepository] ⏰ TTL 过期，发送条件请求: $cacheKey');
+        final response = await _service.getConversationsWithResponse();
 
-      // 3. 更新缓存
+        // 304 - 数据未变化，刷新 TTL 后返回现有缓存
+        if (ConditionalRequestService.isNotModified(response)) {
+          print('[ConversationRepository] ✅ 304 Not Modified，刷新 TTL');
+          await _cache.refreshTTL(cacheKey);
+          return cachedConversations;
+        }
+
+        // 200 - 数据已更新，解析并保存
+        print('[ConversationRepository] 📥 数据已更新，保存到缓存');
+        final conversations = (response.data as List)
+            .map((e) => Conversation.fromJson(e as Map<String, dynamic>))
+            .toList();
+        await _cache.setList(cacheKey, conversations);
+        return conversations;
+      }
+
+      // 2. 无缓存，直接请求 API
+      print('[ConversationRepository] 🌐 无缓存，请求 API: $cacheKey');
+      final response = await _service.getConversationsWithResponse();
+      final data = response.data is List ? response.data : [];
+      final conversations = (data as List)
+          .map((e) => Conversation.fromJson(e as Map<String, dynamic>))
+          .toList();
+
       await _cache.setList(cacheKey, conversations);
       print(
-        '[ConversationRepository] 缓存已更新: $cacheKey, 数量: ${conversations.length}',
+        '[ConversationRepository] 缓存已创建: $cacheKey, 数量: ${conversations.length}',
       );
 
       return conversations;
@@ -65,10 +113,11 @@ class ConversationRepository {
       print('[ConversationRepository] API 请求失败: $e');
 
       // 4. 降级方案：返回过期缓存（如果存在）
-      final fallbackConversations = await _cache.getList<Conversation>(
-        cacheKey,
-      );
-      if (fallbackConversations.isNotEmpty) {
+      final cacheTimestamp = await _cache.getTimestamp(cacheKey);
+      if (cacheTimestamp != null) {
+        final fallbackConversations = await _cache.getList<Conversation>(
+          cacheKey,
+        );
         print(
           '[ConversationRepository] ⚠️ 使用过期缓存作为降级方案, 数量: ${fallbackConversations.length}',
         );
@@ -88,32 +137,60 @@ class ConversationRepository {
   /// 获取会话详情（包含消息信息）
   ///
   /// 会话详情缓存独立管理
-  Future<Conversation> getConversationDetail(String conversationId) async {
+  ///
+  /// 参数：
+  /// - [forceRefresh] 强制刷新，跳过缓存直接请求 API（默认 false）
+  Future<Conversation> getConversationDetail(
+    String conversationId, {
+    bool forceRefresh = false,
+  }) async {
     final conversationDetailKey = CacheKeys.getConversationDetailKey(
       conversationId,
     );
 
     try {
-      // 检查缓存
-      final cachedConversation = await _cache.get<Conversation>(
-        conversationDetailKey,
-      );
-      final isCacheValid =
-          cachedConversation != null &&
-          !(await _cache.isExpired(conversationDetailKey));
+      // 强制刷新时跳过缓存检查
+      if (!forceRefresh) {
+        // 检查缓存
+        final cachedConversation = await _cache.get<Conversation>(
+          conversationDetailKey,
+        );
+        final isCacheValid =
+            cachedConversation != null &&
+            !(await _cache.isExpired(conversationDetailKey));
 
-      if (isCacheValid) {
-        print('[ConversationRepository] 命中会话详情缓存: $conversationDetailKey');
-        return cachedConversation;
+        if (isCacheValid) {
+          print('[ConversationRepository] ✅ 命中会话详情缓存: $conversationDetailKey');
+          return cachedConversation;
+        }
+      } else {
+        print('[ConversationRepository] 🔄 强制刷新会话详情，跳过缓存');
       }
 
-      // 请求 API
-      print('[ConversationRepository] 缓存未命中，请求会话详情: $conversationDetailKey');
-      final conversation = await _service.getConversation(conversationId);
+      // 请求 API（带条件请求）
+      print('[ConversationRepository] 🌐 请求会话详情 API: $conversationDetailKey');
+      final response = await _service.getConversationWithResponse(
+        conversationId,
+        skipConditionalRequest: forceRefresh,
+      );
 
-      // 更新缓存
+      // 检查是否为 304 Not Modified
+      if (ConditionalRequestService.isNotModified(response)) {
+        print('[ConversationRepository] ✅ 304 Not Modified，使用现有缓存');
+        final cachedConversation = await _cache.get<Conversation>(
+          conversationDetailKey,
+        );
+        if (cachedConversation != null) {
+          return cachedConversation;
+        }
+      }
+
+      // 数据已更新，解析并更新缓存
+      final conversation = Conversation.fromJson(
+        response.data as Map<String, dynamic>,
+      );
       await _cache.set(conversationDetailKey, conversation);
-      print('[ConversationRepository] 会话详情缓存已更新: $conversationDetailKey');
+      print('[ConversationRepository] 💾 会话详情缓存已更新: $conversationDetailKey');
 
       return conversation;
     } catch (e) {
@@ -267,11 +344,17 @@ class ConversationRepository {
 
   /// 手动刷新缓存
   Future<List<Conversation>> refreshConversations() async {
-    // 先清除缓存
-    await _invalidateConversationListCache();
+    // 强制刷新（不清缓存，失败时仍可回退到缓存）
+    return await getConversations(forceRefresh: true);
+  }
 
-    // 重新加载
-    return await getConversations();
+  /// 获取缓存中的会话列表（即使已过期）
+  ///
+  /// 返回 null 表示没有缓存记录
+  Future<List<Conversation>?> getCachedConversations() async {
+    final cacheTimestamp = await _cache.getTimestamp(CacheKeys.conversations);
+    if (cacheTimestamp == null) return null;
+    return await _cache.getList<Conversation>(CacheKeys.conversations);
   }
 
   /// 清除所有会话缓存

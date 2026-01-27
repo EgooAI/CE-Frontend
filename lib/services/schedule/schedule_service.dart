@@ -6,9 +6,33 @@ class ScheduleService {
   // 获取所有日程
   Future<List<Schedule>> getSchedules() async {
     try {
-      final response = await ApiClient.instance.get('/schedules');
-      final List<dynamic> data = response.data as List;
+      final response = await ApiClient.instance.get(
+        '/schedules',
+        options: Options(extra: {'skipConditionalRequest': true}),
+      );
+
+      if (response.data is! List) {
+        return [];
+      }
+
+      final List<dynamic> data = response.data;
       return data.map((json) => Schedule.fromJson(json)).toList();
+    } on DioException catch (e) {
+      throw Exception(e.message ?? '获取日程失败');
+    }
+  }
+
+  // 获取所有日程（返回原始响应，用于条件请求）
+  Future<Response> getSchedulesWithResponse({
+    bool skipConditionalRequest = false,
+  }) async {
+    try {
+      return await ApiClient.instance.get(
+        '/schedules',
+        options: Options(
+          extra: {'skipConditionalRequest': skipConditionalRequest},
+        ),
+      );
     } on DioException catch (e) {
       throw Exception(e.message ?? '获取日程失败');
     }

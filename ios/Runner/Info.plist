@@ -49,5 +49,15 @@
 	<string>需要麦克风权限以使用语音输入功能</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>需要语音识别权限以将语音转换为文字</string>
+	<key>NSCameraUsageDescription</key>
+	<string>需要相机权限以拍照和发送图片</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>需要访问相册以选择和发送图片</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>需要保存照片到相册</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>需要位置权限以提供基于位置的日程提醒</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>需要后台位置权限以提供到达提醒功能</string>
 </dict>
 </plist>

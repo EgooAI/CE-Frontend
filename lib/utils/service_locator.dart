@@ -2,6 +2,7 @@ import 'package:get_it/get_it.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../services/cache/cache_service.dart';
 import '../services/cache/hive_cache_service.dart';
+import '../services/cache/conditional_request_service.dart';
 import '../services/core/api_client.dart';
 import '../services/core/auth_service.dart';
 import '../services/schedule/schedule_service.dart';
@@ -59,6 +60,10 @@ Future<void> setupServiceLocator() async {
     await cacheService.init();
     locator.registerSingleton<CacheService>(cacheService);
     print('[ServiceLocator] CacheService 注册完成');
+
+    // 初始化条件请求服务（HTTP 304 缓存）
+    await ConditionalRequestService.init();
+    print('[ServiceLocator] ConditionalRequestService 初始化完成');
 
     // ==================== 3. 注册 API 服务（单例）====================
     locator.registerSingleton<ApiClient>(ApiClient());

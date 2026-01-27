@@ -33,6 +33,23 @@ class ConversationService {
     }
   }
 
+  /// 获取会话列表（返回原始响应，用于条件请求）
+  Future<Response> getConversationsWithResponse({
+    bool skipConditionalRequest = false,
+  }) async {
+    try {
+      return await ApiClient.instance.get(
+        '/conversations',
+        options: Options(
+          extra: {'skipConditionalRequest': skipConditionalRequest},
+        ),
+      );
+    } on DioException catch (e) {
+      print('获取对话列表失败: ${e.message}');
+      throw Exception(e.message ?? 'Failed to load conversations');
+    }
+  }
+
   Future<Conversation> createConversation(String title) async {
     try {
       final response = await ApiClient.instance.post(
@@ -78,12 +95,25 @@ class ConversationService {
       return conversation;
     } on DioException catch (e) {
       print('获取对话详情失败 (DioException): ${e.message}');
-      print('响应状态: ${e.response?.statusCode}');
-      print('响应数据: ${e.response?.data}');
       throw Exception(e.message ?? 'Failed to load conversation');
-    } catch (e) {
-      print('获取对话详情失败 (Other): $e');
-      rethrow;
+    }
+  }
+
+  /// 获取会话详情（返回原始响应，用于条件请求）
+  Future<Response> getConversationWithResponse(
+    String id, {
+    bool skipConditionalRequest = false,
+  }) async {
+    try {
+      return await ApiClient.instance.get(
+        '/conversations/$id',
+        options: Options(
+          extra: {'skipConditionalRequest': skipConditionalRequest},
+        ),
+      );
+    } on DioException catch (e) {
+      print('获取对话详情失败: ${e.message}');
+      throw Exception(e.message ?? 'Failed to load conversation');
     }
   }
 
@@ -133,8 +163,9 @@ class ConversationService {
   // 流式发送消息
   Stream<StreamEvent> sendMessageStream(
     String conversationId,
-    String content,
-  ) async* {
+    String content, {
+    String? attachments, // JSON 字符串格式
+  }) async* {
     final authService = AuthService();
     final token = await authService.getToken();
 
@@ -154,7 +185,11 @@ class ConversationService {
       'Authorization': 'Bearer $token',
       'Content-Type': 'application/json',
     };
-    final body = json.encode({'role': 'user', 'content': content});
+    final body = json.encode({
+      'role': 'user',
+      'content': content,
+      if (attachments != null) 'attachments': attachments,
+    });
 
     // Use cross-platform SSE connector
     await for (final ev in connect(url, headers, body)) {

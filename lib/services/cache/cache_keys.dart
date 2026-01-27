@@ -11,8 +11,8 @@ class CacheKeys {
   /// 使用方式: '${CacheKeys.scheduleDetail}$id'
   static const String scheduleDetail = 'schedule_detail_';
 
-  /// 日程列表缓存过期时间: 15分钟
-  static const Duration schedulesCacheMaxAge = Duration(minutes: 15);
+  /// 日程列表缓存过期时间: 1分钟
+  static const Duration schedulesCacheMaxAge = Duration(minutes: 1);
 
   // ==================== 日常任务相关 ====================
 
@@ -22,8 +22,8 @@ class CacheKeys {
   /// 日常任务详情缓存键前缀（需拼接 ID）
   static const String dailyTaskDetail = 'daily_task_detail_';
 
-  /// 日常任务列表缓存过期时间: 10分钟
-  static const Duration dailyTasksCacheMaxAge = Duration(minutes: 10);
+  /// 日常任务列表缓存过期时间: 1分钟
+  static const Duration dailyTasksCacheMaxAge = Duration(minutes: 1);
 
   // ==================== 聊天相关 ====================
 
@@ -36,11 +36,11 @@ class CacheKeys {
   /// 会话消息列表缓存键前缀（需拼接会话 ID）
   static const String conversationMessages = 'conversation_messages_';
 
-  /// 会话列表缓存过期时间: 3天
-  static const Duration conversationsCacheMaxAge = Duration(days: 3);
+  /// 会话列表缓存过期时间: 1分钟（聊天消息实时性要求高）
+  static const Duration conversationsCacheMaxAge = Duration(minutes: 1);
 
-  /// 会话详情缓存过期时间: 3天（保持与列表一致，便于离线访问）
-  static const Duration conversationDetailCacheMaxAge = Duration(days: 3);
+  /// 会话详情缓存过期时间: 1分钟（保持与列表一致）
+  static const Duration conversationDetailCacheMaxAge = Duration(minutes: 1);
 
   // ==================== 用户相关 ====================
 
@@ -50,8 +50,11 @@ class CacheKeys {
   /// 用户配置缓存键
   static const String userConfig = 'user_config';
 
-  /// 用户信息缓存过期时间: 5分钟（配置经常变化）
-  static const Duration userProfileCacheMaxAge = Duration(minutes: 5);
+  /// 用户信息缓存过期时间: 1分钟（配置经常变化）
+  static const Duration userProfileCacheMaxAge = Duration(minutes: 1);
+
+  /// 用户配置缓存过期时间: 1分钟
+  static const Duration userConfigCacheMaxAge = Duration(minutes: 1);
 
   // ==================== 同步队列相关 ====================
 

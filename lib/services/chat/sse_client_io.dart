@@ -14,6 +14,27 @@ Stream<Map<String, dynamic>> connectImpl(
   request.body = body;
 
   final streamed = await client.send(request);
+  if (streamed.statusCode >= 400) {
+    final bodyText = await streamed.stream.bytesToString();
+    String message = '请求失败: HTTP ${streamed.statusCode}';
+    try {
+      final decoded = jsonDecode(bodyText);
+      if (decoded is Map && decoded['message'] != null) {
+        message = decoded['message'].toString();
+      } else if (bodyText.isNotEmpty) {
+        message = bodyText;
+      }
+    } catch (_) {
+      if (bodyText.isNotEmpty) {
+        message = bodyText;
+      }
+    }
+    yield {
+      'event': 'error',
+      'data': {'message': message, 'status': streamed.statusCode},
+    };
+    return;
+  }
   final utf8Stream = streamed.stream.transform(utf8.decoder);
   String buffer = '';
 

@@ -19,7 +19,6 @@ class AppSnackBar {
     }
 
     final overlay = Overlay.of(context, rootOverlay: true);
-    if (overlay == null) return;
 
     final theme = Theme.of(context).snackBarTheme;
     final displayDuration = duration ?? snackBar.duration;
@@ -80,7 +79,6 @@ void showAppSnackBar(BuildContext context, SnackBar snackBar) {
 
 class _AppSnackBarOverlay extends StatefulWidget {
   const _AppSnackBarOverlay({
-    super.key,
     required this.snackBar,
     required this.theme,
     required this.onDismissed,

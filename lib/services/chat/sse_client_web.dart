@@ -54,6 +54,29 @@ Stream<Map<String, dynamic>> connectImpl(
   });
 
   request.onLoad.listen((e) {
+    if (request.status != null && request.status! >= 400) {
+      final text = request.responseText ?? '';
+      String message = '请求失败: HTTP ${request.status}';
+      try {
+        final decoded = jsonDecode(text);
+        if (decoded is Map && decoded['message'] != null) {
+          message = decoded['message'].toString();
+        } else if (text.isNotEmpty) {
+          message = text;
+        }
+      } catch (_) {
+        if (text.isNotEmpty) {
+          message = text;
+        }
+      }
+      controller.add({
+        'event': 'error',
+        'data': {'message': message, 'status': request.status},
+      });
+      controller.close();
+      return;
+    }
+
     // final chunk may be available in responseText
     final text = request.responseText ?? '';
     if (text.length > buffer.length) {

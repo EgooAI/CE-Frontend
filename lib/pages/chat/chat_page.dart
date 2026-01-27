@@ -1,18 +1,24 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../models/chat/conversation.dart';
 import '../../repositories/conversation_repository.dart';
 import '../../services/chat/conversation_service.dart';
 import '../../repositories/schedule_repository.dart';
 import '../../services/sync/sync_queue_service.dart';
+import '../../services/upload/image_upload_service.dart';
 import '../../widgets/schedule/create_schedule_bottom_sheet.dart';
 import '../../widgets/common/offline_banner.dart';
 // import '../../widgets/chat/message_bubble.dart';
 import '../../widgets/chat/conversation_drawer.dart';
 // import '../../widgets/chat/welcome_guide.dart';
 import '../../widgets/chat/chat_input_bar.dart';
+import '../../widgets/chat/image_preview_widget.dart';
 import '../../widgets/chat/message_list_view.dart';
 import '../../services/chat/voice_input_service.dart';
 import '../../services/chat/stream_message_handler.dart';
@@ -47,6 +53,11 @@ class _ChatPageState extends State<ChatPage> {
   // 语音识别相关
   final VoiceInputService _voiceInput = VoiceInputService();
 
+  // 图片上传相关
+  final ImagePicker _imagePicker = ImagePicker();
+  final ImageUploadService _imageUploadService = ImageUploadService();
+  final List<ImageAttachment> _images = [];
+
   // 搜索相关
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
@@ -56,7 +67,7 @@ class _ChatPageState extends State<ChatPage> {
   @override
   void initState() {
     super.initState();
-    _loadConversations();
+    _loadConversations(staleWhileRevalidate: true);
     _initVoiceInput();
     _listenToPendingCount();
     _searchController.addListener(_onSearchChanged);
@@ -153,9 +164,276 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  Future<void> _loadConversations() async {
+  /// 从相册选择图片
+  Future<void> _pickImage() async {
     try {
-      final conversations = await _conversationRepository.getConversations();
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1920,
+        maxHeight: 1920,
+        imageQuality: 85,
+      );
+
+      if (image != null) {
+        await _handleImageSelected(image);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('选择图片失败: $e')));
+      }
+    }
+  }
+
+  /// 拍照
+  Future<void> _takePhoto() async {
+    try {
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 1920,
+        maxHeight: 1920,
+        imageQuality: 85,
+      );
+
+      if (image != null) {
+        await _handleImageSelected(image);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('拍照失败: $e')));
+      }
+    }
+  }
+
+  /// 处理选中的图片
+  Future<void> _handleImageSelected(XFile xfile) async {
+    // 添加到列表（显示上传中状态）
+    final file = File(xfile.path);
+    final fileName = xfile.path.split('/').last;
+
+    print('[ImageUpload] 📸 开始处理图片');
+    print('[ImageUpload] 📁 文件路径: ${xfile.path}');
+    print('[ImageUpload] 📝 文件名: $fileName');
+    print('[ImageUpload] 📊 文件大小: ${await file.length()} 字节');
+
+    setState(() {
+      _images.add(
+        ImageAttachment(file: file, name: fileName, isUploading: true),
+      );
+    });
+
+    final index = _images.length - 1;
+
+    // 上传图片
+    try {
+      print('[ImageUpload] 🚀 开始上传到服务器...');
+      final imageInfo = await _imageUploadService.uploadImage(file);
+
+      print('[ImageUpload] ✅ 上传成功！');
+      print('[ImageUpload] 🔑 Key: ${imageInfo.key}');
+      print('[ImageUpload] 🔗 URL: ${imageInfo.url}');
+      print('[ImageUpload] 📏 大小: ${imageInfo.size} 字节');
+
+      // 更新为上传成功状态（同时保存 key 和 url）
+      setState(() {
+        _images[index] = _images[index].copyWith(
+          key: imageInfo.key, // OSS对象Key（永久有效）
+          url: imageInfo.url, // 预签名URL（12小时有效）
+          isUploading: false,
+        );
+      });
+    } catch (e, stackTrace) {
+      // 详细的错误日志
+      print('[ImageUpload] ❌ 上传失败！');
+      print('[ImageUpload] 错误类型: ${e.runtimeType}');
+      print('[ImageUpload] 错误信息: $e');
+      print('[ImageUpload] 堆栈跟踪:\n$stackTrace');
+
+      // 更新为上传失败状态
+      setState(() {
+        _images[index] = _images[index].copyWith(
+          isUploading: false,
+          error: e.toString(),
+        );
+      });
+
+      if (mounted) {
+        // 显示更详细的错误信息
+        final errorMessage = e.toString().contains('Exception:')
+            ? e.toString().replaceFirst('Exception: ', '')
+            : e.toString();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('图片上传失败: $errorMessage'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: '查看日志',
+              textColor: Colors.white,
+              onPressed: () {
+                print('[ImageUpload] 用户查看完整错误信息');
+                print('[ImageUpload] 完整错误: $e');
+              },
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  /// 删除图片
+  void _removeImage(int index) {
+    setState(() {
+      _images.removeAt(index);
+    });
+  }
+
+  Future<void> _handlePastedImage(Uint8List bytes, {String? filename}) async {
+    final name =
+        filename ?? 'paste_${DateTime.now().millisecondsSinceEpoch}.png';
+
+    setState(() {
+      _images.add(ImageAttachment(bytes: bytes, name: name, isUploading: true));
+    });
+
+    final index = _images.length - 1;
+
+    try {
+      final imageInfo = await _imageUploadService.uploadImageBytes(
+        bytes,
+        filename: name,
+      );
+
+      setState(() {
+        _images[index] = _images[index].copyWith(
+          key: imageInfo.key,
+          url: imageInfo.url,
+          isUploading: false,
+        );
+      });
+    } catch (e, stackTrace) {
+      print('[ImageUpload] ❌ 粘贴图片上传失败！');
+      print('[ImageUpload] 错误类型: ${e.runtimeType}');
+      print('[ImageUpload] 错误信息: $e');
+      print('[ImageUpload] 堆栈跟踪:\n$stackTrace');
+
+      setState(() {
+        _images[index] = _images[index].copyWith(
+          isUploading: false,
+          error: e.toString(),
+        );
+      });
+
+      if (mounted) {
+        final errorMessage = e.toString().contains('Exception:')
+            ? e.toString().replaceFirst('Exception: ', '')
+            : e.toString();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('图片上传失败: $errorMessage'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    }
+  }
+
+  /// 刷新会话列表（Drawer 打开时调用）
+  ///
+  /// 先展示当前列表，再后台强刷：
+  /// - 优先缓存秒开
+  /// - 强刷后若有更新则动态更新
+  Future<void> _refreshConversationList() async {
+    print('[ChatPage] 🔄 Drawer 打开，后台强刷会话列表...');
+    _refreshConversationsInBackground();
+  }
+
+  Future<void> _loadCurrentConversationDetail({
+    bool forceRefresh = false,
+  }) async {
+    if (_currentConversation == null) return;
+
+    try {
+      final detail = await _conversationRepository.getConversationDetail(
+        _currentConversation!.id,
+        forceRefresh: forceRefresh,
+      );
+      if (mounted) {
+        setState(() {
+          _messages
+            ..clear()
+            ..addAll(detail.messages ?? []);
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('加载对话失败: $e')));
+      }
+    }
+  }
+
+  Future<void> _refreshConversationsInBackground() async {
+    try {
+      final conversations = await _conversationRepository.getConversations(
+        forceRefresh: false,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _conversations = conversations;
+        if (_conversations.isNotEmpty && _currentConversation == null) {
+          _currentConversation = _conversations.first;
+          _isLoading = true;
+        }
+      });
+
+      await _loadCurrentConversationDetail(forceRefresh: false);
+    } catch (_) {
+      // 静默失败：保留缓存内容
+    }
+  }
+
+  Future<void> _loadConversations({
+    bool forceRefresh = false,
+    bool staleWhileRevalidate = false,
+  }) async {
+    if (staleWhileRevalidate) {
+      final cachedConversations = await _conversationRepository
+          .getCachedConversations();
+
+      if (cachedConversations != null) {
+        setState(() {
+          _conversations = cachedConversations;
+          // 如果有对话，自动进入最近一次的对话（首个为最近）
+          if (_conversations.isNotEmpty && _currentConversation == null) {
+            _currentConversation = _conversations.first;
+            _isLoading = true;
+          }
+        });
+
+        await _loadCurrentConversationDetail();
+      }
+
+      // 后台强刷，获取最新数据并动态更新
+      _refreshConversationsInBackground();
+      return;
+    }
+
+    try {
+      final conversations = await _conversationRepository.getConversations(
+        forceRefresh: forceRefresh,
+      );
       setState(() {
         _conversations = conversations;
         // 如果有对话，自动进入最近一次的对话（首个为最近）
@@ -167,28 +445,43 @@ class _ChatPageState extends State<ChatPage> {
 
       // 如果有对话，加载消息
       if (_conversations.isNotEmpty && _currentConversation != null) {
-        try {
-          final detail = await _conversationRepository.getConversationDetail(
-            _currentConversation!.id,
-          );
-          setState(() {
-            _messages = detail.messages ?? [];
-            _isLoading = false;
-          });
-        } catch (e) {
-          if (mounted) {
-            setState(() => _isLoading = false);
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text('加载对话失败: $e')));
-          }
-        }
+        await _loadCurrentConversationDetail(forceRefresh: forceRefresh);
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('加载对话列表失败: $e')));
+      }
+    }
+  }
+
+  /// 刷新当前会话（下拉刷新使用）
+  Future<void> _refreshCurrentConversation() async {
+    if (_currentConversation == null) return;
+
+    try {
+      print('[ChatPage] 🔄 开始刷新当前会话...');
+      final detail = await _conversationRepository.getConversationDetail(
+        _currentConversation!.id,
+        forceRefresh: true, // 强制从服务器获取最新数据
+      );
+
+      if (mounted) {
+        setState(() {
+          _messages = detail.messages ?? [];
+        });
+        print('[ChatPage] ✅ 会话刷新成功，消息数: ${_messages.length}');
+      }
+    } catch (e) {
+      print('[ChatPage] ❌ 会话刷新失败: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('刷新失败: $e'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
       }
     }
   }
@@ -394,10 +687,16 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _sendMessage() async {
-    if (_controller.text.trim().isEmpty) return;
+    if (_controller.text.trim().isEmpty && _images.isEmpty) return;
 
     final content = _controller.text;
+    final messageImages = List<ImageAttachment>.from(_images);
     _controller.clear();
+
+    // 清空图片列表
+    setState(() {
+      _images.clear();
+    });
 
     if (_currentConversation == null) {
       // 如果没有当前对话，先创建一个默认对话
@@ -418,6 +717,9 @@ class _ChatPageState extends State<ChatPage> {
         }
         // 恢复输入内容
         _controller.text = content;
+        setState(() {
+          _images.addAll(messageImages);
+        });
         return;
       }
     }
@@ -428,6 +730,22 @@ class _ChatPageState extends State<ChatPage> {
       '[AutoTitle] 消息发送前检查 - 是否第一条消息: $isFirstMessage, 当前消息数: ${_messages.length}',
     );
 
+    // 构建附件数据（使用 key 而不是 url）
+    Map<String, dynamic>? attachments;
+    if (messageImages.isNotEmpty) {
+      attachments = {
+        'images': messageImages
+            .where((img) => img.key != null) // 确保 key 存在
+            .map(
+              (img) => {
+                'key': img.key!, // 存储 key 到数据库
+                'name': img.name,
+              },
+            )
+            .toList(),
+      };
+    }
+
     // 添加临时用户消息
     final tempUserMessage = Message(
       id: 'temp_user_${DateTime.now().millisecondsSinceEpoch}',
@@ -435,6 +753,7 @@ class _ChatPageState extends State<ChatPage> {
       content: content,
       conversationId: _currentConversation!.id,
       createdAt: DateTime.now(),
+      attachments: attachments != null ? jsonEncode(attachments) : null,
     );
 
     setState(() {
@@ -486,7 +805,11 @@ class _ChatPageState extends State<ChatPage> {
       );
 
       _streamSub = conversationService
-          .sendMessageStream(_currentConversation!.id, content)
+          .sendMessageStream(
+            _currentConversation!.id,
+            content,
+            attachments: attachments != null ? jsonEncode(attachments) : null,
+          )
           .listen(
             (event) {
               if (!mounted) return;
@@ -777,6 +1100,13 @@ class _ChatPageState extends State<ChatPage> {
           ),
         ],
       ),
+      onDrawerChanged: (isOpened) {
+        // Drawer 打开时自动刷新会话列表
+        if (isOpened) {
+          print('[ChatPage] 📂 Drawer 已打开，刷新会话列表...');
+          _refreshConversationList();
+        }
+      },
       drawer: ConversationDrawer(
         searchController: _searchController,
         isSearching: _isSearching,
@@ -808,6 +1138,7 @@ class _ChatPageState extends State<ChatPage> {
                 });
               },
               scrollController: _scrollController,
+              onRefresh: _refreshCurrentConversation,
             ),
           ),
           if (_isSending)
@@ -825,6 +1156,11 @@ class _ChatPageState extends State<ChatPage> {
             onToggleListening: _toggleListening,
             onStartListening: _startListening,
             onStopListening: _stopListening,
+            images: _images,
+            onPickImage: _pickImage,
+            onTakePhoto: _takePhoto,
+            onRemoveImage: _removeImage,
+            onPasteImage: _handlePastedImage,
           ),
         ],
       ),

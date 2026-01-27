@@ -73,6 +73,13 @@ abstract class CacheService {
   /// 通常由 set/setList 自动调用，不需要手动调用
   Future<void> setTimestamp(String key);
 
+  /// 刷新缓存的 TTL（不修改数据，仅更新时间戳）
+  ///
+  /// [key] 缓存键
+  ///
+  /// 用于条件请求返回 304 时，数据未变化但需要延长缓存有效期
+  Future<void> refreshTTL(String key);
+
   /// 获取缓存大小（条目数量）
   ///
   /// 返回：缓存中的键值对数量

@@ -44,6 +44,24 @@ class DailyTaskService {
     }
   }
 
+  /// 获取日常任务列表（返回原始响应，用于条件请求）
+  Future<Response> getDailyTasksWithResponse({
+    String? status,
+    bool skipConditionalRequest = false,
+  }) async {
+    try {
+      return await ApiClient.instance.get(
+        '/daily-tasks',
+        queryParameters: status != null ? {'status': status} : null,
+        options: Options(
+          extra: {'skipConditionalRequest': skipConditionalRequest},
+        ),
+      );
+    } on DioException catch (e) {
+      throw Exception(e.message ?? '获取日常任务列表失败');
+    }
+  }
+
   /// 获取单个日常任务详情
   Future<DailyTask> getDailyTask(String taskId) async {
     try {

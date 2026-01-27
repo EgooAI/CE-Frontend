@@ -195,31 +195,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(minWidth: 180),
-                      child: ElevatedButton(
-                        onPressed: _showAccountManagementToast,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: const Color(0xFF1F2329),
-                          elevation: 2,
-                          shadowColor: const Color(0x33000000),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 10,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        child: const Text(
-                          '账号管理',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ),
+                    // TODO: 账号管理功能未上线，暂时隐藏入口。
                   ],
                 ),
               ),
@@ -533,7 +509,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  void _showAccountManagementToast() {
-    showAppSnackBar(context, const SnackBar(content: Text('暂未开发此功能')));
-  }
+  // void _showAccountManagementToast() {
+  //   showAppSnackBar(context, const SnackBar(content: Text('暂未开发此功能')));
+  // }
 }

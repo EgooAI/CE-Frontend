@@ -79,6 +79,10 @@ class Schedule {
   });
 
   factory Schedule.fromJson(Map<String, dynamic> json) {
+    final dynamic rawRecurrence = json['recurrence'] ?? json['rule'];
+    final String? recurrenceValue = rawRecurrence == null
+        ? null
+        : (rawRecurrence is String ? rawRecurrence : jsonEncode(rawRecurrence));
     // DateTime.parse() 会将带时区的时间转换为 UTC
     // 需要使用 .toLocal() 转换回本地时区，保持正确的日期
     return Schedule(
@@ -97,7 +101,7 @@ class Schedule {
       type: json['type'],
       priority: json['priority'],
       // 兼容后端返回的 rule（重复规则字段名）
-      recurrence: json['recurrence'] ?? json['rule'],
+      recurrence: recurrenceValue,
       participants: json['participants'],
       notes: json['notes'],
       attachments: json['attachments'],

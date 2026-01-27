@@ -16,7 +16,7 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.3+1
+version: 1.0.4+1
 
 environment:
   sdk: ^3.10.0
@@ -55,6 +55,9 @@ dependencies:
   crypto: ^3.0.5
   flutter_slidable: ^4.0.3
 
+  # 图片选择器
+  image_picker: ^1.1.2
+
   # 本地缓存 - Hive
   hive: ^2.2.3
   hive_flutter: ^1.1.0
@@ -78,6 +81,35 @@ dependencies:
   package_info_plus: ^9.0.0 # 获取版本号，用于判断是否执行热更逻辑
   permission_handler: ^12.0.1 # 动态申请权限 (非常有必要预埋)
   path_provider: ^2.1.2 # 文件路径 (Hive 可能用到，显式声明更安全)
+
+  # === 📦 2026-01-27 防御性预埋（原生依赖，避免频繁发包） ===
+  # 文件操作
+  file_selector: ^1.0.3 # 选择各类文件（PDF/Word/Excel等）
+  # image_cropper: ^9.1.1 # 图片裁剪（头像编辑）
+  image_cropper: ^11.0.0
+  flutter_image_compress: ^2.3.0 # 图片压缩优化
+
+  # 媒体播放
+  video_player: ^2.9.2 # 视频播放（聊天视频消息）
+  just_audio: ^0.10.5 # 音频播放（语音消息）
+
+  # 功能增强
+  share_plus: ^12.0.1 # 分享到其他应用（分享对话/日程）
+  flutter_local_notifications: ^20.0.0 # 本地通知（日程提醒）
+  mobile_scanner: ^7.1.4 # 二维码扫描（扫码添加好友/日程）
+
+  # 剪贴板（粘贴图片）
+  super_clipboard: ^0.9.1
+
+  # 安全存储
+  # flutter_secure_storage: ^10.0.2 # 安全存储敏感信息（Token/密钥）
+  flutter_secure_storage: ^10.0.0
+
+  # 定位（可选，用于基于位置的日程提醒）
+  geolocator: ^14.0.2 # GPS定位
+
+  # 设备信息
+  device_info_plus: ^11.5.0 # 设备信息（日志/统计）
 
 dev_dependencies:
   flutter_test:

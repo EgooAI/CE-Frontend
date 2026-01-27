@@ -35,7 +35,7 @@ class _DailyPageState extends State<DailyPage> {
   @override
   void initState() {
     super.initState();
-    _loadTasks();
+    _loadTasks(staleWhileRevalidate: true);
     _loadConfig();
     _listenToPendingCount();
   }
@@ -79,7 +79,7 @@ class _DailyPageState extends State<DailyPage> {
 
   // 公开的刷新方法，供外部调用（MainPage 调用）
   void refreshData() {
-    _loadTasks();
+    _loadTasks(staleWhileRevalidate: true);
     _loadConfig();
   }
 
@@ -91,10 +91,44 @@ class _DailyPageState extends State<DailyPage> {
   }
 
   /// 加载日常任务列表
-  Future<void> _loadTasks() async {
+  Future<void> _refreshTasksInBackground() async {
+    try {
+      final tasks = await _dailyTaskRepository.getDailyTasks(
+        status: _dailyTaskStatusFilter,
+        forceRefresh: false,
+      );
+
+      if (mounted) {
+        setState(() {
+          _tasks = tasks;
+          _errorMessage = null;
+        });
+      }
+    } catch (_) {
+      // 静默失败：保留缓存内容
+    }
+  }
+
+  Future<void> _loadTasks({bool staleWhileRevalidate = false}) async {
     setState(() {
       _errorMessage = null;
     });
+
+    if (staleWhileRevalidate) {
+      final cachedTasks = await _dailyTaskRepository.getCachedDailyTasks(
+        status: _dailyTaskStatusFilter,
+      );
+
+      if (cachedTasks != null) {
+        setState(() {
+          _tasks = cachedTasks;
+        });
+      }
+
+      // 后台强刷，获取最新数据并动态更新
+      _refreshTasksInBackground();
+      return;
+    }
 
     try {
       final tasks = await _dailyTaskRepository.getDailyTasks(

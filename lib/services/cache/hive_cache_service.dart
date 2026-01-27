@@ -48,11 +48,7 @@ class HiveCacheService implements CacheService {
 
         // 检查是否过期（使用内部方法，不再加锁）
         if (await _isExpiredInternal(key)) {
-          print('[HiveCacheService] 缓存已过期，删除: $key');
-          // 直接删除，避免死锁（不调用 delete 方法）
-          await _box!.delete(key);
-          await _box!.delete('$key$_timestampSuffix');
-          return null;
+          print('[HiveCacheService] 缓存已过期: $key');
         }
 
         final value = _box!.get(key);
@@ -127,11 +123,7 @@ class HiveCacheService implements CacheService {
 
         // 检查是否过期（使用内部方法，不再加锁）
         if (await _isExpiredInternal(key)) {
-          print('[HiveCacheService] 列表缓存已过期，删除: $key');
-          // 直接删除，避免死锁（不调用 delete 方法）
-          await _box!.delete(key);
-          await _box!.delete('$key$_timestampSuffix');
-          return [];
+          print('[HiveCacheService] 列表缓存已过期: $key');
         }
 
         final value = _box!.get(key);
@@ -186,14 +178,20 @@ class HiveCacheService implements CacheService {
 
       // 根据 key 获取过期时间
       Duration maxAge;
-      if (key.contains(CacheKeys.schedules)) {
+      if (key.contains(CacheKeys.schedules) ||
+          key.contains(CacheKeys.scheduleDetail)) {
         maxAge = CacheKeys.schedulesCacheMaxAge;
-      } else if (key.contains(CacheKeys.dailyTasks)) {
+      } else if (key.contains(CacheKeys.dailyTasks) ||
+          key.contains(CacheKeys.dailyTaskDetail)) {
         maxAge = CacheKeys.dailyTasksCacheMaxAge;
-      } else if (key.contains(CacheKeys.conversations)) {
+      } else if (key.contains(CacheKeys.conversations) ||
+          key.contains(CacheKeys.conversationDetail) ||
+          key.contains(CacheKeys.conversationMessages)) {
         maxAge = CacheKeys.conversationsCacheMaxAge;
       } else if (key.contains(CacheKeys.userProfile)) {
         maxAge = CacheKeys.userProfileCacheMaxAge;
+      } else if (key.contains(CacheKeys.userConfig)) {
+        maxAge = CacheKeys.userConfigCacheMaxAge;
       } else {
         maxAge = const Duration(minutes: 10); // 默认 10 分钟
       }
@@ -225,6 +223,25 @@ class HiveCacheService implements CacheService {
     }
   }
 
+  /// 全局过期检查（仅用于清理）
+  ///
+  /// 超过全局清理周期才删除，保留过期缓存用于离线回退
+  Future<bool> _isGloballyExpiredInternal(String key) async {
+    try {
+      if (_box == null) return true;
+
+      final timestamp = await _getTimestampInternal(key);
+      if (timestamp == null) return true;
+
+      final now = DateTime.now();
+      final diff = now.difference(timestamp);
+      return diff > CacheKeys.globalCleanupMaxAge;
+    } catch (e) {
+      print('[HiveCacheService] 全局过期检查失败: $key, 错误: $e');
+      return true;
+    }
+  }
+
   @override
   Future<void> setTimestamp(String key) async {
     try {
@@ -235,6 +252,22 @@ class HiveCacheService implements CacheService {
     } catch (e) {
       print('[HiveCacheService] 设置时间戳失败: $key, 错误: $e');
     }
+  }
+
+  @override
+  Future<void> refreshTTL(String key) async {
+    await _lock.synchronized(() async {
+      try {
+        if (_box == null) return;
+
+        // 仅更新时间戳，不修改数据
+        final now = DateTime.now().millisecondsSinceEpoch;
+        await _box!.put('$key$_timestampSuffix', now);
+        print('[HiveCacheService] TTL 已刷新: $key');
+      } catch (e) {
+        print('[HiveCacheService] 刷新 TTL 失败: $key, 错误: $e');
+      }
+    });
   }
 
   @override
@@ -289,8 +322,8 @@ class HiveCacheService implements CacheService {
           // 跳过时间戳 key
           if (key.toString().endsWith(_timestampSuffix)) continue;
 
-          // 检查过期 - 使用内部逻辑避免重复加锁
-          if (await _isExpiredInternal(key.toString())) {
+          // 仅清理超出全局清理周期的缓存，避免误删可用于离线回退的过期缓存
+          if (await _isGloballyExpiredInternal(key.toString())) {
             // 直接删除，避免调用 delete() 方法（它会再次尝试获取锁）
             await _box!.delete(key);
             await _box!.delete('${key}$_timestampSuffix');
@@ -323,14 +356,20 @@ class HiveCacheService implements CacheService {
 
       // 根据 key 获取过期时间
       Duration maxAge;
-      if (key.contains(CacheKeys.schedules)) {
+      if (key.contains(CacheKeys.schedules) ||
+          key.contains(CacheKeys.scheduleDetail)) {
         maxAge = CacheKeys.schedulesCacheMaxAge;
-      } else if (key.contains(CacheKeys.dailyTasks)) {
+      } else if (key.contains(CacheKeys.dailyTasks) ||
+          key.contains(CacheKeys.dailyTaskDetail)) {
         maxAge = CacheKeys.dailyTasksCacheMaxAge;
-      } else if (key.contains(CacheKeys.conversations)) {
+      } else if (key.contains(CacheKeys.conversations) ||
+          key.contains(CacheKeys.conversationDetail) ||
+          key.contains(CacheKeys.conversationMessages)) {
         maxAge = CacheKeys.conversationsCacheMaxAge;
       } else if (key.contains(CacheKeys.userProfile)) {
         maxAge = CacheKeys.userProfileCacheMaxAge;
+      } else if (key.contains(CacheKeys.userConfig)) {
+        maxAge = CacheKeys.userConfigCacheMaxAge;
       } else {
         maxAge = const Duration(minutes: 10); // 默认 10 分钟
       }

@@ -69,7 +69,8 @@ jobs:
             --dart-define=API_URL=${{ secrets.API_URL }} \
             --dart-define=XFYUN_APP_ID=${{ secrets.XFYUN_APP_ID }} \
             --dart-define=XFYUN_ACCESS_KEY_ID=${{ secrets.XFYUN_ACCESS_KEY_ID }} \
-            --dart-define=XFYUN_ACCESS_KEY_SECRET=${{ secrets.XFYUN_ACCESS_KEY_SECRET }}
+            --dart-define=XFYUN_ACCESS_KEY_SECRET=${{ secrets.XFYUN_ACCESS_KEY_SECRET }} \
+            --no-tree-shake-icons
 
       - name: ✅ Patch 完成通知
         run: |
@@ -123,7 +124,8 @@ jobs:
             --dart-define=API_URL=${{ secrets.API_URL }} \
             --dart-define=XFYUN_APP_ID=${{ secrets.XFYUN_APP_ID }} \
             --dart-define=XFYUN_ACCESS_KEY_ID=${{ secrets.XFYUN_ACCESS_KEY_ID }} \
-            --dart-define=XFYUN_ACCESS_KEY_SECRET=${{ secrets.XFYUN_ACCESS_KEY_SECRET }}
+            --dart-define=XFYUN_ACCESS_KEY_SECRET=${{ secrets.XFYUN_ACCESS_KEY_SECRET }} \
+            --no-tree-shake-icons
 
       - name: ✅ Patch 完成通知
         run: |

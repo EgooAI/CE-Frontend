@@ -4,6 +4,7 @@ import '../models/schedule/schedule.dart';
 import '../models/sync/sync_task.dart';
 import '../services/cache/cache_service.dart';
 import '../services/cache/cache_keys.dart';
+import '../services/cache/conditional_request_service.dart';
 import '../services/schedule/schedule_service.dart';
 import '../services/sync/sync_queue_service.dart';
 import '../utils/service_locator.dart';
@@ -36,35 +37,84 @@ class ScheduleRepository {
   Future<List<Schedule>> getSchedules({
     required int year,
     required int month,
+    bool forceRefresh = false,
   }) async {
     final cacheKey = CacheKeys.schedulesByMonth(year, month);
 
     try {
-      // 1. 尝试读取缓存
-      final cachedSchedules = await _cache.getList<Schedule>(cacheKey);
-      final isCacheValid =
-          cachedSchedules.isNotEmpty && !(await _cache.isExpired(cacheKey));
+      // 1. 检查缓存是否存在 & 是否过期
+      final cacheTimestamp = await _cache.getTimestamp(cacheKey);
+      final isCacheExpired = await _cache.isExpired(cacheKey);
 
-      if (isCacheValid) {
+      if (forceRefresh) {
+        print('[ScheduleRepository] 🔄 强制刷新，不发送 If-Modified-Since: $cacheKey');
+        final response = await _service.getSchedulesWithResponse(
+          skipConditionalRequest: true,
+        );
+        final data = response.data is List ? response.data : [];
+        final allSchedules = (data as List)
+            .map((json) => Schedule.fromJson(json as Map<String, dynamic>))
+            .toList();
+
+        final filteredSchedules = allSchedules.where((s) {
+          return s.startTime.year == year && s.startTime.month == month;
+        }).toList();
+
+        await _cache.setList(cacheKey, filteredSchedules);
+        return filteredSchedules;
+      }
+
+      // TTL 未过期，直接返回缓存（可能是空列表）
+      if (!forceRefresh && cacheTimestamp != null && !isCacheExpired) {
+        final cachedSchedules = await _cache.getList<Schedule>(cacheKey);
         print(
-          '[ScheduleRepository] 命中缓存: $cacheKey, 数量: ${cachedSchedules.length}',
+          '[ScheduleRepository] ✅ TTL 命中: $cacheKey, 数量: ${cachedSchedules.length}',
         );
         return cachedSchedules;
       }
 
-      // 2. 缓存无效，请求 API（获取所有日程，然后过滤）
-      print('[ScheduleRepository] 缓存未命中，请求 API: $cacheKey');
-      final allSchedules = await _service.getSchedules();
+      // TTL 过期，但缓存存在，使用条件请求判断
+      if (cacheTimestamp != null) {
+        final cachedSchedules = await _cache.getList<Schedule>(cacheKey);
+        print('[ScheduleRepository] ⏰ TTL 过期，发送条件请求: $cacheKey');
+        final response = await _service.getSchedulesWithResponse();
+
+        if (ConditionalRequestService.isNotModified(response)) {
+          print('[ScheduleRepository] ✅ 304 Not Modified，刷新 TTL');
+          await _cache.refreshTTL(cacheKey);
+          return cachedSchedules;
+        }
+
+        print('[ScheduleRepository] 📥 数据已更新，重新过滤');
+        final data = response.data is List ? response.data : [];
+        final allSchedules = (data as List)
+            .map((json) => Schedule.fromJson(json as Map<String, dynamic>))
+            .toList();
+
+        final filteredSchedules = allSchedules.where((s) {
+          return s.startTime.year == year && s.startTime.month == month;
+        }).toList();
+
+        await _cache.setList(cacheKey, filteredSchedules);
+        return filteredSchedules;
+      }
+
+      // 2. 无缓存，请求 API（获取所有日程，然后过滤）
+      print('[ScheduleRepository] 🌐 无缓存，请求 API: $cacheKey');
+      final response = await _service.getSchedulesWithResponse();
+      final data = response.data is List ? response.data : [];
+      final allSchedules = (data as List)
+          .map((json) => Schedule.fromJson(json as Map<String, dynamic>))
+          .toList();
 
       // 按年月过滤日程
       final filteredSchedules = allSchedules.where((s) {
         return s.startTime.year == year && s.startTime.month == month;
       }).toList();
 
-      // 3. 更新缓存
       await _cache.setList(cacheKey, filteredSchedules);
       print(
-        '[ScheduleRepository] 缓存已更新: $cacheKey, 数量: ${filteredSchedules.length}',
+        '[ScheduleRepository] 缓存已创建: $cacheKey, 数量: ${filteredSchedules.length}',
       );
 
       return filteredSchedules;
@@ -72,8 +122,9 @@ class ScheduleRepository {
       print('[ScheduleRepository] API 请求失败: $e');
 
       // 4. 降级方案：返回过期缓存（如果存在）
-      final fallbackSchedules = await _cache.getList<Schedule>(cacheKey);
-      if (fallbackSchedules.isNotEmpty) {
+      final cacheTimestamp = await _cache.getTimestamp(cacheKey);
+      if (cacheTimestamp != null) {
+        final fallbackSchedules = await _cache.getList<Schedule>(cacheKey);
         print(
           '[ScheduleRepository] ⚠️ 使用过期缓存作为降级方案, 数量: ${fallbackSchedules.length}',
         );
@@ -87,14 +138,93 @@ class ScheduleRepository {
 
   /// 获取所有日程（跨月份）
   ///
-  /// 注意：不使用缓存（数据量太大）
-  Future<List<Schedule>> getAllSchedules() async {
+  /// 使用缓存 + 条件请求（304）优化
+  Future<List<Schedule>> getAllSchedules({bool forceRefresh = false}) async {
+    final cacheKey = CacheKeys.schedules;
+
     try {
-      return await _service.getSchedules();
+      final cacheTimestamp = await _cache.getTimestamp(cacheKey);
+      final isCacheExpired = await _cache.isExpired(cacheKey);
+
+      if (forceRefresh) {
+        print('[ScheduleRepository] 🔄 强制刷新(全量)，不发送 If-Modified-Since');
+        final response = await _service.getSchedulesWithResponse(
+          skipConditionalRequest: true,
+        );
+        final data = response.data is List ? response.data : [];
+        final schedules = (data as List)
+            .map((json) => Schedule.fromJson(json as Map<String, dynamic>))
+            .toList();
+        await _cache.setList(cacheKey, schedules);
+        return schedules;
+      }
+
+      // 非强刷且 TTL 未过期，直接返回缓存（可能是空列表）
+      if (!forceRefresh && cacheTimestamp != null && !isCacheExpired) {
+        final cachedSchedules = await _cache.getList<Schedule>(cacheKey);
+        print(
+          '[ScheduleRepository] ✅ TTL 命中(全量): $cacheKey, 数量: ${cachedSchedules.length}',
+        );
+        return cachedSchedules;
+      }
+
+      // TTL 过期，但缓存存在，使用条件请求判断
+      if (cacheTimestamp != null) {
+        final cachedSchedules = await _cache.getList<Schedule>(cacheKey);
+        print('[ScheduleRepository] ⏰ TTL 过期(全量)，发送条件请求: $cacheKey');
+        final response = await _service.getSchedulesWithResponse();
+
+        if (ConditionalRequestService.isNotModified(response)) {
+          print('[ScheduleRepository] ✅ 304 Not Modified(全量)，刷新 TTL');
+          await _cache.refreshTTL(cacheKey);
+          return cachedSchedules;
+        }
+
+        final data = response.data is List ? response.data : [];
+        final schedules = (data as List)
+            .map((json) => Schedule.fromJson(json as Map<String, dynamic>))
+            .toList();
+        await _cache.setList(cacheKey, schedules);
+        return schedules;
+      }
+
+      // 无缓存，请求 API
+      print('[ScheduleRepository] 🌐 无缓存(全量)，请求 API: $cacheKey');
+      final response = await _service.getSchedulesWithResponse();
+      final data = response.data is List ? response.data : [];
+      final schedules = (data as List)
+          .map((json) => Schedule.fromJson(json as Map<String, dynamic>))
+          .toList();
+
+      await _cache.setList(cacheKey, schedules);
+      print(
+        '[ScheduleRepository] 缓存已创建(全量): $cacheKey, 数量: ${schedules.length}',
+      );
+      return schedules;
     } catch (e) {
       print('[ScheduleRepository] 获取所有日程失败: $e');
+
+      final cacheTimestamp = await _cache.getTimestamp(cacheKey);
+      if (cacheTimestamp != null) {
+        final fallbackSchedules = await _cache.getList<Schedule>(cacheKey);
+        print(
+          '[ScheduleRepository] ⚠️ 使用过期缓存(全量)作为降级方案, 数量: ${fallbackSchedules.length}',
+        );
+        return fallbackSchedules;
+      }
+
       rethrow;
     }
+  }
+
+  /// 获取缓存中的全量日程（即使已过期）
+  ///
+  /// 返回 null 表示没有缓存记录
+  Future<List<Schedule>?> getCachedAllSchedules() async {
+    final cacheKey = CacheKeys.schedules;
+    final cacheTimestamp = await _cache.getTimestamp(cacheKey);
+    if (cacheTimestamp == null) return null;
+    return await _cache.getList<Schedule>(cacheKey);
   }
 
   /// 创建日程
@@ -272,11 +402,21 @@ class ScheduleRepository {
     required int year,
     required int month,
   }) async {
-    // 先清除缓存
-    await _invalidateMonthCache(year, month);
+    // 强制刷新（不清缓存，失败时仍可回退到缓存）
+    return await getSchedules(year: year, month: month, forceRefresh: true);
+  }
 
-    // 重新加载
-    return await getSchedules(year: year, month: month);
+  /// 获取缓存中的日程列表（即使已过期）
+  ///
+  /// 返回 null 表示没有缓存记录
+  Future<List<Schedule>?> getCachedSchedules({
+    required int year,
+    required int month,
+  }) async {
+    final cacheKey = CacheKeys.schedulesByMonth(year, month);
+    final cacheTimestamp = await _cache.getTimestamp(cacheKey);
+    if (cacheTimestamp == null) return null;
+    return await _cache.getList<Schedule>(cacheKey);
   }
 
   /// 清除所有日程缓存

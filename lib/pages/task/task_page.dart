@@ -63,7 +63,7 @@ class _TaskPageState extends State<TaskPage>
   void initState() {
     super.initState();
     _tabController = TabController(length: _tabs.length, vsync: this);
-    _loadTasks();
+    _loadTasks(staleWhileRevalidate: true);
     _loadConfig();
     _listenToPendingCount();
   }
@@ -118,7 +118,7 @@ class _TaskPageState extends State<TaskPage>
 
   // 公开的刷新方法，供外部调用
   void refreshData() {
-    _loadTasks();
+    _loadTasks(staleWhileRevalidate: true);
     _loadConfig();
   }
 
@@ -135,11 +135,43 @@ class _TaskPageState extends State<TaskPage>
     }
   }
 
+  Future<void> _refreshTasksInBackground() async {
+    try {
+      final allSchedules = await _scheduleRepository.getAllSchedules(
+        forceRefresh: false,
+      );
+
+      allSchedules.sort((a, b) => a.startTime.compareTo(b.startTime));
+
+      if (mounted) {
+        setState(() {
+          _allTasks = allSchedules;
+          _errorMessage = null;
+        });
+      }
+    } catch (_) {
+      // 静默失败：保留缓存内容
+    }
+  }
+
   // 加载任务数据
-  Future<void> _loadTasks() async {
+  Future<void> _loadTasks({bool staleWhileRevalidate = false}) async {
     setState(() {
       _errorMessage = null;
     });
+
+    if (staleWhileRevalidate) {
+      final cachedTasks = await _scheduleRepository.getCachedAllSchedules();
+      if (cachedTasks != null) {
+        cachedTasks.sort((a, b) => a.startTime.compareTo(b.startTime));
+        setState(() {
+          _allTasks = cachedTasks;
+        });
+      }
+
+      _refreshTasksInBackground();
+      return;
+    }
 
     try {
       final allSchedules = await _scheduleRepository.getAllSchedules();

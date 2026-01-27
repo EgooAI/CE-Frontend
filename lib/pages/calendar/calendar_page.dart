@@ -5,7 +5,7 @@ import '../../models/schedule/schedule.dart';
 import '../../models/daily/daily_task.dart';
 
 import '../../repositories/schedule_repository.dart';
-import '../../services/daily/daily_task_service.dart';
+import '../../repositories/daily_task_repository.dart';
 import '../../services/schedule/schedule_service.dart';
 import '../../services/sync/sync_queue_service.dart';
 import '../../widgets/schedule/create_schedule_bottom_sheet.dart';
@@ -40,7 +40,7 @@ class _CalendarPageState extends State<CalendarPage> {
   }
 
   final _scheduleRepository = ScheduleRepository();
-  final _dailyTaskService = DailyTaskService();
+  final _dailyTaskRepository = DailyTaskRepository();
   // 用于特殊操作（如删除重复模板）的 Service 直接引用
   final _scheduleService = ScheduleService();
   final _syncQueue = GetIt.instance<SyncQueueService>();
@@ -120,7 +120,10 @@ class _CalendarPageState extends State<CalendarPage> {
 
       if (_showDailyTasksInCalendar) {
         try {
-          final tasks = await _dailyTaskService.getDailyTasks(status: 'active');
+          final tasks = await _dailyTaskRepository.getDailyTasks(
+            status: 'active',
+            forceRefresh: true,
+          );
           setState(() {
             _dailyTasks = tasks;
           });
@@ -200,24 +203,51 @@ class _CalendarPageState extends State<CalendarPage> {
   // 加载日程数据
   Future<void> _loadSchedules() async {
     try {
-      List<Schedule> schedules = [];
-
-      // 使用 Repository 按月加载（启用缓存）
       final year = _focusedDay.year;
       final month = _focusedDay.month;
-      final monthSchedules = await _scheduleRepository.getSchedules(
+
+      // 1. 先用缓存秒开
+      final cachedMonthSchedules = await _scheduleRepository.getCachedSchedules(
         year: year,
         month: month,
       );
+      final cachedDailyTasks = _showDailyTasksInCalendar
+          ? await _dailyTaskRepository.getCachedDailyTasks(status: 'active')
+          : null;
 
-      schedules = monthSchedules.where((s) => s.type != 'daily').toList();
+      if (cachedMonthSchedules != null || cachedDailyTasks != null) {
+        final schedules = (cachedMonthSchedules ?? [])
+            .where((s) => s.type != 'daily')
+            .toList();
+
+        if (mounted) {
+          setState(() {
+            _scheduleMap = _buildScheduleMap(schedules);
+            _dailyTasks = cachedDailyTasks ?? [];
+            _scheduleUpdateCount++;
+          });
+        }
+
+        if (_selectedDay != null) {
+          _onDaySelected(_selectedDay!, _focusedDay);
+        }
+      }
+
+      // 2. 后台强刷，获取最新数据并动态更新
+      final monthSchedules = await _scheduleRepository.getSchedules(
+        year: year,
+        month: month,
+        forceRefresh: false,
+      );
+
+      final schedules = monthSchedules.where((s) => s.type != 'daily').toList();
 
       List<DailyTask> loadedDailyTasks = [];
-      // 如果启用在日历显示日常任务，加载日常数据
       if (_showDailyTasksInCalendar) {
         try {
-          loadedDailyTasks = await _dailyTaskService.getDailyTasks(
+          loadedDailyTasks = await _dailyTaskRepository.getDailyTasks(
             status: 'active',
+            forceRefresh: false,
           );
         } catch (e) {
           debugPrint('加载日常任务失败: $e');
@@ -232,8 +262,6 @@ class _CalendarPageState extends State<CalendarPage> {
         });
       }
 
-      // 解决首屏命中缓存但不渲染的问题：
-      // 主动触发一次与“手动切换日期”相同的刷新路径，确保列表和标记立即更新。
       if (_selectedDay != null) {
         _onDaySelected(_selectedDay!, _focusedDay);
       }

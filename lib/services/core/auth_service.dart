@@ -295,10 +295,13 @@ class AuthService {
         data: {'refresh_token': refreshToken, 'deviceId': deviceId},
       );
 
-      final newAccessToken = response.data['access_token'] as String;
-      final newRefreshToken = response.data['refresh_token'] as String?;
-      final expiresIn = response.data['expires_in'] as int?;
-      final refreshExpiresIn = response.data['refresh_expires_in'] as int?;
+      // 注意：ApiClient 拦截器已自动解包 data 字段
+      // response.data 已经是 {access_token, refresh_token, expires_in, ...}
+      final data = response.data as Map<String, dynamic>;
+      final newAccessToken = data['access_token'] as String;
+      final newRefreshToken = data['refresh_token'] as String?;
+      final expiresIn = data['expires_in'] as int?;
+      final refreshExpiresIn = data['refresh_expires_in'] as int?;
 
       // 保存新的 tokens
       await _saveTokens(
@@ -365,7 +368,10 @@ class AuthService {
   Future<User> getProfile() async {
     try {
       final response = await ApiClient.instance.get('/profile');
-      final userData = response.data['user'];
+      // 注意：ApiClient 拦截器已自动解包 data 字段
+      // response.data 已经是 {user: {...}}
+      final data = response.data as Map<String, dynamic>;
+      final userData = data['user'];
       final user = User.fromJson(userData);
       await _saveUser(user);
       return user;

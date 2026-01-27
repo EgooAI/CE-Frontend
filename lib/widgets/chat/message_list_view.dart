@@ -7,7 +7,7 @@ import 'welcome_guide.dart';
 ///
 /// 职责：
 /// - 显示消息列表或欢迎引导
-/// - 处理滚动监听（快速下滑收起键盘）
+/// - 支持下拉刷新
 /// - 管理加载状态
 class MessageListView extends StatefulWidget {
   /// 当前对话
@@ -28,6 +28,9 @@ class MessageListView extends StatefulWidget {
   /// 滚动控制器
   final ScrollController scrollController;
 
+  /// 下拉刷新回调
+  final Future<void> Function()? onRefresh;
+
   const MessageListView({
     super.key,
     required this.currentConversation,
@@ -36,6 +39,7 @@ class MessageListView extends StatefulWidget {
     required this.showFullGuide,
     required this.onExampleTap,
     required this.scrollController,
+    this.onRefresh,
   });
 
   @override
@@ -43,9 +47,9 @@ class MessageListView extends StatefulWidget {
 }
 
 class _MessageListViewState extends State<MessageListView> {
-  // 滑动收起键盘相关
-  double _lastScrollPosition = 0;
-  DateTime? _lastScrollTime;
+  // 滑动收起键盘相关（已禁用 - 影响正常使用）
+  // double _lastScrollPosition = 0;
+  // DateTime? _lastScrollTime;
 
   @override
   Widget build(BuildContext context) {
@@ -71,9 +75,17 @@ class _MessageListViewState extends State<MessageListView> {
     }
 
     // 显示消息列表
-    return NotificationListener<ScrollNotification>(
-      onNotification: _handleScrollNotification,
+    return RefreshIndicator(
+      onRefresh: widget.onRefresh ?? () async {},
       child: ListView.builder(
+        // NotificationListener 已禁用 - 滚动收起键盘功能影响正常使用
+        // return NotificationListener<ScrollNotification>(
+        //   onNotification: _handleScrollNotification,
+        //   child: ListView.builder(
+        // NotificationListener 已禁用 - 滚动收起键盘功能影响正常使用
+        // return NotificationListener<ScrollNotification>(
+        //   onNotification: _handleScrollNotification,
+        //   child: ListView.builder(
         controller: widget.scrollController,
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
         itemCount: widget.messages.length,
@@ -82,38 +94,39 @@ class _MessageListViewState extends State<MessageListView> {
           final isUser = message.role == 'user';
           return MessageBubble(message: message, isUser: isUser);
         },
+        // ),
       ),
     );
   }
 
-  /// 处理滚动通知，实现快速下滑收起键盘
-  bool _handleScrollNotification(ScrollNotification notification) {
-    if (notification is ScrollUpdateNotification) {
-      final currentPosition = notification.metrics.pixels;
-      final currentTime = DateTime.now();
-
-      if (_lastScrollTime != null) {
-        // 计算滑动速度（像素/毫秒）
-        final deltaPosition = currentPosition - _lastScrollPosition;
-        final deltaTime = currentTime
-            .difference(_lastScrollTime!)
-            .inMilliseconds;
-
-        if (deltaTime > 0) {
-          final velocity = deltaPosition.abs() / deltaTime;
-
-          // 只在向下快速滑动时收起键盘（速度 > 2 px/ms，约等于 2000 px/s）
-          if (deltaPosition > 0 &&
-              velocity > 2 &&
-              FocusScope.of(context).hasFocus) {
-            FocusScope.of(context).unfocus();
-          }
-        }
-      }
-
-      _lastScrollPosition = currentPosition;
-      _lastScrollTime = currentTime;
-    }
-    return false;
-  }
+  /// 处理滚动通知，实现快速下滑收起键盘（已禁用 - 影响正常使用）
+  // bool _handleScrollNotification(ScrollNotification notification) {
+  //   if (notification is ScrollUpdateNotification) {
+  //     final currentPosition = notification.metrics.pixels;
+  //     final currentTime = DateTime.now();
+  //
+  //     if (_lastScrollTime != null) {
+  //       // 计算滑动速度（像素/毫秒）
+  //       final deltaPosition = currentPosition - _lastScrollPosition;
+  //       final deltaTime = currentTime
+  //           .difference(_lastScrollTime!)
+  //           .inMilliseconds;
+  //
+  //       if (deltaTime > 0) {
+  //         final velocity = deltaPosition.abs() / deltaTime;
+  //
+  //         // 只在向下快速滑动时收起键盘（速度 > 2 px/ms，约等于 2000 px/s）
+  //         if (deltaPosition > 0 &&
+  //             velocity > 2 &&
+  //             FocusScope.of(context).hasFocus) {
+  //           FocusScope.of(context).unfocus();
+  //         }
+  //       }
+  //     }
+  //
+  //     _lastScrollPosition = currentPosition;
+  //     _lastScrollTime = currentTime;
+  //   }
+  //   return false;
+  // }
 }
