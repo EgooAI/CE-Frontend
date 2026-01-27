@@ -190,7 +190,7 @@ class ApiService {
       final response = await _dio.get(
         '/api/conversations',
         options: Options(
-          headers: lastModified != null 
+          headers: lastModified != null
             ? {'If-Modified-Since': lastModified}
             : {},
         ),
@@ -264,7 +264,7 @@ Future<List<Conversation>> getConversations() async {
   if (response.statusCode == 200) {
     // 保存新数据
     await prefs.setString(cacheKey, response.body);
-    
+
     // 保存时间戳
     final newLastModified = response.headers['last-modified'];
     if (newLastModified != null) {
@@ -620,10 +620,10 @@ await prefs.remove('last_modified_conversations');
 class ConversationRepository {
   // 内存缓存（最快）
   List<Conversation>? _memoryCache;
-  
+
   // 本地持久化缓存（次之）
   final HiveCacheService _cache;
-  
+
   // 网络请求（最慢）
   final ApiService _api;
 
@@ -661,10 +661,10 @@ Future<List<Conversation>> getConversations() async {
   final cached = _cacheBox.get('conversations');
   if (cached != null) {
     final conversations = (cached as List).map((e) => Conversation.fromJson(e)).toList();
-    
+
     // 🔄 后台验证是否有新数据
     _revalidateInBackground();
-    
+
     return conversations;
   }
 
@@ -694,7 +694,7 @@ void _revalidateInBackground() async {
 // 使用 StreamController 实现响应式更新
 class ConversationRepository {
   final _controller = StreamController<List<Conversation>>.broadcast();
-  
+
   Stream<List<Conversation>> get conversationsStream => _controller.stream;
 
   Future<void> refresh() async {

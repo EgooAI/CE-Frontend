@@ -114,7 +114,7 @@ async function generateConversationTitle(content, accessToken) {
     });
 
     const result = await response.json();
-    
+
     if (response.ok) {
       console.log('生成的标题:', result.data.title);
       return result.data.title;
@@ -181,22 +181,22 @@ async function handleGenerateTitle() {
 
 <template>
   <div class="title-generator">
-    <textarea 
-      v-model="content" 
+    <textarea
+      v-model="content"
       placeholder="输入会话的主要内容..."
       rows="4"
     />
-    <button 
-      @click="handleGenerateTitle" 
+    <button
+      @click="handleGenerateTitle"
       :disabled="isGenerating"
     >
       {{ isGenerating ? '生成中...' : '生成标题' }}
     </button>
-    
+
     <div v-if="generatedTitle" class="result">
       <strong>生成的标题：</strong>{{ generatedTitle }}
     </div>
-    
+
     <div v-if="error" class="error">
       {{ error }}
     </div>
@@ -292,17 +292,17 @@ async function safeGenerateTitle(content, accessToken) {
     if (response.ok) {
       return result.data.title;
     }
-    
+
     // 根据错误类型返回默认标题
     if (result.error_code === 'INVALID_TOKEN') {
       // 跳转到登录页
       window.location.href = '/login';
       return null;
     }
-    
+
     // 生成失败时使用截取内容作为标题
     return content.slice(0, 20) + '...';
-    
+
   } catch (error) {
     console.error('生成标题异常:', error);
     // 返回默认标题
@@ -325,14 +325,14 @@ const titleCache = new Map();
 
 async function getCachedTitle(content, accessToken) {
   const cacheKey = content.trim();
-  
+
   if (titleCache.has(cacheKey)) {
     return titleCache.get(cacheKey);
   }
-  
+
   const title = await generateConversationTitle(content, accessToken);
   titleCache.set(cacheKey, title);
-  
+
   return title;
 }
 ```
@@ -390,7 +390,7 @@ curl -X POST http://localhost:8080/api/conversations/generate-title \
 async function createConversationWithAutoTitle(firstMessage, accessToken) {
   // 1. 先生成标题
   const title = await generateConversationTitle(firstMessage, accessToken);
-  
+
   // 2. 创建会话
   const response = await fetch('/api/conversations', {
     method: 'POST',
@@ -400,9 +400,9 @@ async function createConversationWithAutoTitle(firstMessage, accessToken) {
     },
     body: JSON.stringify({ title })
   });
-  
+
   const conversation = await response.json();
-  
+
   // 3. 添加首条消息
   await fetch(`/api/conversations/${conversation.data.id}/messages`, {
     method: 'POST',
@@ -415,7 +415,7 @@ async function createConversationWithAutoTitle(firstMessage, accessToken) {
       role: 'user'
     })
   });
-  
+
   return conversation.data;
 }
 ```

@@ -292,7 +292,7 @@ conversation.messages.forEach(message => {
 ```javascript
 function ImageWithFallback({ imageData, conversationId }) {
   const [imageUrl, setImageUrl] = useState(imageData.url);
-  
+
   const handleError = async () => {
     // URL过期，重新获取对话历史以获得新的预签名URL
     const response = await fetch(`/api/conversations/${conversationId}`, {
@@ -300,20 +300,20 @@ function ImageWithFallback({ imageData, conversationId }) {
         'Authorization': `Bearer ${token}`
       }
     });
-    
+
     const { data } = await response.json();
     const message = data.messages.find(m => {
       const attachments = JSON.parse(m.attachments || '{}');
       return attachments.images?.some(img => img.key === imageData.key);
     });
-    
+
     if (message) {
       const attachments = JSON.parse(message.attachments);
       const refreshedImage = attachments.images.find(img => img.key === imageData.key);
       setImageUrl(refreshedImage.url);
     }
   };
-  
+
   return <img src={imageUrl} onError={handleError} alt={imageData.name} />;
 }
 ```
@@ -407,7 +407,7 @@ A: 后端不做压缩，但可以在阿里云OSS控制台配置自动图片处�
 A: 前端重新调用对话历史接口，后端会自动生成新的预签名URL。建议在前端监听图片的`onError`事件自动重试。
 
 **Q: 为什么要存Key而不是URL？**
-A: 
+A:
 - Key是永久有效的文件标识
 - URL会过期，不适合长期存储
 - 动态生成URL可以灵活调整有效期

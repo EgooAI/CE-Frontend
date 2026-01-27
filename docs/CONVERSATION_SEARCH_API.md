@@ -584,7 +584,7 @@ async function completeConversationFlow(accessToken) {
     body: JSON.stringify({ title: '新项目讨论' })
   });
   const newConv = await createRes.json();
-  
+
   // 2. 添加消息
   await fetch(`/api/conversations/${newConv.data.id}/messages`, {
     method: 'POST',
@@ -597,7 +597,7 @@ async function completeConversationFlow(accessToken) {
       role: 'user'
     })
   });
-  
+
   // 3. 更新会话标题（可选）
   await fetch(`/api/conversations/${newConv.data.id}/title`, {
     method: 'PUT',
@@ -607,11 +607,11 @@ async function completeConversationFlow(accessToken) {
     },
     body: JSON.stringify({ title: '2025 年新项目计划' })
   });
-  
+
   // 4. 搜索相关会话
   const results = await searchConversations('项目计划', accessToken);
   console.log('找到相关会话:', results);
-  
+
   return results;
 }
 ```

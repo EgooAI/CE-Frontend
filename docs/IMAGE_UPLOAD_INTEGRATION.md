@@ -239,7 +239,7 @@ Future<void> _handleImageSelected(XFile xfile) async {
 
   // 2. 上传图片
   final imageInfo = await _imageUploadService.uploadImage(file);
-  
+
   // 3. 更新状态（同时保存 key 和 url）
   setState(() {
     _images[index] = _images[index].copyWith(
@@ -442,7 +442,7 @@ A: 运行 `flutter clean && flutter pub get`。
    ```bash
    # Android
    cat android/app/src/main/AndroidManifest.xml | grep permission
-   
+
    # iOS
    cat ios/Runner/Info.plist | grep Usage
    ```
@@ -485,7 +485,7 @@ A: 运行 `flutter clean && flutter pub get`。
 
 ---
 
-**文档版本：** v1.1  
-**创建日期：** 2026-01-27  
-**最后更新：** 2026-01-27  
+**文档版本：** v1.1
+**创建日期：** 2026-01-27
+**最后更新：** 2026-01-27
 **维护者：** CE-Frontend Team

@@ -12,11 +12,3 @@ app_id: 4646a3f9-7bba-4da6-b4a4-0a517abd0f2c
 # https://pub.dev/packages/shorebird_code_push
 # Uncomment the following line to disable automatic updates.
 # auto_update: false
-
-# 🎨 Flutter 编译配置
-# 禁用 Material Icons tree-shaking，确保热更新时所有图标可用
-# 参考：https://docs.flutter.dev/perf/app-size#icons
-flutter:
-  # 编译时附加参数
-  build_args:
-    - --no-tree-shake-icons # 全量包含 Material Icons，支持热更新动态使用

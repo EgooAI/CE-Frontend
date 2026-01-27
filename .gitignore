@@ -85,3 +85,6 @@ app.*.map.json
 .env
 
 .vscode/**
+**.md
+!readme.md
+docs/**

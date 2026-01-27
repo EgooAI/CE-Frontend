@@ -356,7 +356,7 @@ async function createDailyTask() {
       color: '#FF6B6B'
     })
   });
-  
+
   const { data } = await response.json();
   console.log('创建成功:', data);
 }
@@ -370,7 +370,7 @@ async function fetchDailyTasks() {
   const response = await fetch('/api/daily-tasks?status=active', {
     headers: { 'Authorization': `Bearer ${accessToken}` }
   });
-  
+
   const result = await response.json();
   dailyTasks.value = result.data;
 }
@@ -390,7 +390,7 @@ async function completeTask(taskId, completed = true, note = '') {
       note
     })
   });
-  
+
   const { data } = await response.json();
   console.log('打卡成功:', data);
 }
@@ -402,7 +402,7 @@ async function getStats(taskId) {
   const response = await fetch(`/api/daily-tasks/${taskId}/stats`, {
     headers: { 'Authorization': `Bearer ${accessToken}` }
   });
-  
+
   const { data } = await response.json();
   console.log(`完成率: ${data.completionRate}%`);
   console.log(`连续天数: ${data.consecutiveDays} 天`);
@@ -529,7 +529,7 @@ POST /api/login
   ```javascript
   // 设置为早上 6 点
   const startTime = new Date('1970-01-01T06:00:00Z');
-  
+
   // 或从用户选择的时间构造
   const userTime = new Date();
   userTime.setHours(6, 0, 0);
@@ -572,6 +572,6 @@ A: 可以。所有数据基于用户 ID 存储，同一用户在不同端登录�
 
 ---
 
-**API 文档版本**：v1.0  
-**最后更新**：2025-12-14  
+**API 文档版本**：v1.0
+**最后更新**：2025-12-14
 **维护者**：Backend Team

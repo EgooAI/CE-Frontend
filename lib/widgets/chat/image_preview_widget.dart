@@ -118,18 +118,18 @@ class ImagePreviewWidget extends StatelessWidget {
                     fit: BoxFit.cover,
                   )
                 : image.file != null
-                    ? Image.file(
-                        image.file!,
-                        width: 84,
-                        height: 84,
-                        fit: BoxFit.cover,
-                      )
-                    : Container(
-                        width: 84,
-                        height: 84,
-                        color: const Color(0xFFF5F5F5),
-                        child: const Icon(Icons.image, size: 32),
-                      ),
+                ? Image.file(
+                    image.file!,
+                    width: 84,
+                    height: 84,
+                    fit: BoxFit.cover,
+                  )
+                : Container(
+                    width: 84,
+                    height: 84,
+                    color: const Color(0xFFF5F5F5),
+                    child: const Icon(Icons.image, size: 32),
+                  ),
           ),
 
           // 上传中遮罩

@@ -457,22 +457,22 @@ function generateRecurrence(frequency, interval = 1, options = {}) {
     frequency: frequency.toUpperCase(),
     interval: interval
   };
-  
+
   // 添加 by_day（仅对 WEEKLY 有效）
   if (options.byDay && Array.isArray(options.byDay)) {
     recurrence.by_day = options.byDay;
   }
-  
+
   // 添加 until（截止日期）
   if (options.until) {
     recurrence.until = new Date(options.until).toISOString();
   }
-  
+
   // 添加 count（重复次数）
   if (options.count) {
     recurrence.count = parseInt(options.count);
   }
-  
+
   return recurrence;
 }
 
@@ -503,16 +503,16 @@ function parseRecurrenceToText(recurrence) {
   if (!recurrence || !recurrence.frequency) {
     return '不重复';
   }
-  
+
   const freqMap = {
     'DAILY': '每天',
     'WEEKLY': '每周',
     'MONTHLY': '每月',
     'YEARLY': '每年'
   };
-  
+
   let text = freqMap[recurrence.frequency] || recurrence.frequency;
-  
+
   if (recurrence.interval && recurrence.interval > 1) {
     const unitMap = {
       'DAILY': '天',
@@ -522,7 +522,7 @@ function parseRecurrenceToText(recurrence) {
     };
     text = `每 ${recurrence.interval} ${unitMap[recurrence.frequency] || '次'}`;
   }
-  
+
   // 添加周几信息
   if (recurrence.by_day && recurrence.by_day.length > 0) {
     const dayMap = {
@@ -532,7 +532,7 @@ function parseRecurrenceToText(recurrence) {
     const days = recurrence.by_day.map(d => dayMap[d] || d).join('、');
     text += `（${days}）`;
   }
-  
+
   // 添加截止条件
   if (recurrence.until) {
     const date = new Date(recurrence.until).toLocaleDateString('zh-CN');
@@ -540,7 +540,7 @@ function parseRecurrenceToText(recurrence) {
   } else if (recurrence.count) {
     text += `，共 ${recurrence.count} 次`;
   }
-  
+
   return text;
 }
 
