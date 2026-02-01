@@ -51,6 +51,14 @@ class Schedule {
   final DateTime? updatedAt;
   @HiveField(22)
   final bool isDaily;
+  @HiveField(23)
+  final DateTime? startDate; // YYYY-MM-DD
+  @HiveField(24)
+  final DateTime? endDate; // YYYY-MM-DD
+  @HiveField(25)
+  final bool hasStartTime; // 是否有具体开始时间
+  @HiveField(26)
+  final bool hasEndTime; // 是否有具体结束时间
 
   Schedule({
     required this.id,
@@ -76,6 +84,10 @@ class Schedule {
     this.createdAt,
     this.updatedAt,
     this.isDaily = false,
+    this.startDate,
+    this.endDate,
+    this.hasStartTime = true,
+    this.hasEndTime = true,
   });
 
   factory Schedule.fromJson(Map<String, dynamic> json) {
@@ -85,17 +97,35 @@ class Schedule {
         : (rawRecurrence is String ? rawRecurrence : jsonEncode(rawRecurrence));
     // DateTime.parse() 会将带时区的时间转换为 UTC
     // 需要使用 .toLocal() 转换回本地时区，保持正确的日期
+    DateTime? parseDateOnly(String? value) {
+      if (value == null || value.isEmpty) return null;
+      final parsed = DateTime.tryParse(value);
+      if (parsed == null) return null;
+      return DateTime(parsed.year, parsed.month, parsed.day);
+    }
+
+    final hasStartTime = json['hasStartTime'] ?? json['startTime'] != null;
+    final hasEndTime = json['hasEndTime'] ?? json['endTime'] != null;
+    final startDate = parseDateOnly(json['startDate']);
+    final endDate = parseDateOnly(json['endDate']);
+
+    final DateTime parsedStartTime = json['startTime'] != null
+        ? DateTime.parse(json['startTime']).toLocal()
+        : (startDate ?? DateTime.now());
+    final DateTime? parsedEndTime = json['endTime'] != null
+        ? DateTime.parse(json['endTime']).toLocal()
+        : null;
+
     return Schedule(
       id: json['id'],
       userId: json['userId'] ?? '', // 模板列表可能没有 userId
       title: json['title'],
       description: json['description'],
       // 转换为本地时区，确保日期正确
-      startTime: DateTime.parse(json['startTime']).toLocal(),
-      endTime: json['endTime'] != null
-          ? DateTime.parse(json['endTime']).toLocal()
-          : null,
-      allDay: json['allDay'] ?? false,
+      startTime: parsedStartTime,
+      endTime: parsedEndTime,
+      allDay:
+          json['allDay'] ?? (startDate != null && !hasStartTime && !hasEndTime),
       location: json['location'],
       status: json['status'] ?? 'pending',
       type: json['type'],
@@ -117,6 +147,18 @@ class Schedule {
           ? DateTime.parse(json['updatedAt']).toLocal()
           : null,
       isDaily: json['type'] == 'daily' ? true : false,
+      startDate: startDate,
+      endDate:
+          endDate ??
+          (parsedEndTime != null
+              ? DateTime(
+                  parsedEndTime.year,
+                  parsedEndTime.month,
+                  parsedEndTime.day,
+                )
+              : null),
+      hasStartTime: hasStartTime as bool,
+      hasEndTime: hasEndTime as bool,
     );
   }
 
@@ -142,6 +184,24 @@ class Schedule {
       return '$year-$month-${day}T$hour:$minute:$second$sign$offsetHours:$offsetMinutes';
     }
 
+    String formatDateOnly(DateTime dt) {
+      final year = dt.year.toString().padLeft(4, '0');
+      final month = dt.month.toString().padLeft(2, '0');
+      final day = dt.day.toString().padLeft(2, '0');
+      return '$year-$month-$day';
+    }
+
+    final effectiveStartDate =
+        startDate ??
+        (hasStartTime
+            ? DateTime(startTime.year, startTime.month, startTime.day)
+            : null);
+    final effectiveEndDate =
+        endDate ??
+        (hasEndTime && endTime != null
+            ? DateTime(endTime!.year, endTime!.month, endTime!.day)
+            : null);
+
     // 处理 recurrence：如果是 JSON 字符串，解析成对象
     dynamic recurrenceValue;
     if (recurrence != null && recurrence!.isNotEmpty) {
@@ -158,8 +218,13 @@ class Schedule {
       'userId': userId,
       'title': title,
       'description': description,
-      'startTime': formatDateTime(startTime),
-      if (endTime != null) 'endTime': formatDateTime(endTime!),
+      if (effectiveStartDate != null)
+        'startDate': formatDateOnly(effectiveStartDate),
+      if (hasStartTime) 'startTime': formatDateTime(startTime),
+      if (effectiveEndDate != null) 'endDate': formatDateOnly(effectiveEndDate),
+      if (hasEndTime && endTime != null) 'endTime': formatDateTime(endTime!),
+      'hasStartTime': hasStartTime,
+      'hasEndTime': hasEndTime,
       'allDay': allDay,
       'location': location,
       'status': status,
@@ -201,11 +266,16 @@ class Schedule {
       return '$period${hour12.toString().padLeft(2, '0')}:$mm';
     }
 
-    if (allDay) {
-      return '全天';
+    if (!hasStartTime && !hasEndTime) {
+      if (startDate != null) {
+        final dateStr =
+            '${startDate!.year}-${startDate!.month.toString().padLeft(2, '0')}-${startDate!.day.toString().padLeft(2, '0')}';
+        return dateStr;
+      }
+      return '未设置';
     }
     final startStr = formatTime(startTime);
-    if (endTime == null) {
+    if (!hasEndTime || endTime == null) {
       return startStr;
     }
     final endStr = formatTime(endTime!);
@@ -267,6 +337,10 @@ class Schedule {
     DateTime? startTime,
     DateTime? endTime,
     bool? allDay,
+    DateTime? startDate,
+    DateTime? endDate,
+    bool? hasStartTime,
+    bool? hasEndTime,
     String? location,
     String? status,
     String? type,
@@ -288,6 +362,10 @@ class Schedule {
       startTime: startTime ?? this.startTime,
       endTime: endTime ?? this.endTime,
       allDay: allDay ?? this.allDay,
+      startDate: startDate ?? this.startDate,
+      endDate: endDate ?? this.endDate,
+      hasStartTime: hasStartTime ?? this.hasStartTime,
+      hasEndTime: hasEndTime ?? this.hasEndTime,
       location: location ?? this.location,
       status: status ?? this.status,
       type: type ?? this.type,
@@ -300,6 +378,7 @@ class Schedule {
       remindBefore: remindBefore ?? this.remindBefore,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      isDaily: isDaily,
     );
   }
 }

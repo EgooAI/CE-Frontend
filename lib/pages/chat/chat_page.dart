@@ -13,6 +13,7 @@ import '../../repositories/schedule_repository.dart';
 import '../../services/sync/sync_queue_service.dart';
 import '../../services/upload/image_upload_service.dart';
 import '../../widgets/schedule/create_schedule_bottom_sheet.dart';
+import '../../utils/crud_force_refresh.dart';
 import '../../widgets/common/offline_banner.dart';
 // import '../../widgets/chat/message_bubble.dart';
 import '../../widgets/chat/conversation_drawer.dart';
@@ -918,6 +919,10 @@ class _ChatPageState extends State<ChatPage> {
     });
   }
 
+  Future<void> _forceRefreshSchedulesCache() async {
+    await _scheduleRepository.getAllSchedules(forceRefresh: true);
+  }
+
   /// 处理 AI 解析出的日程数据
   Future<void> _handleScheduleParsed(Map<String, dynamic> data) async {
     if (!mounted) return;
@@ -929,7 +934,10 @@ class _ChatPageState extends State<ChatPage> {
       onSave: (schedule) async {
         try {
           // 调用 API 创建日程
-          await _scheduleRepository.createSchedule(schedule);
+          await runCrudWithForceRefresh(
+            action: () => _scheduleRepository.createSchedule(schedule),
+            forceRefresh: _forceRefreshSchedulesCache,
+          );
 
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(

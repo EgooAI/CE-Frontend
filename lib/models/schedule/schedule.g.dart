@@ -40,13 +40,17 @@ class ScheduleAdapter extends TypeAdapter<Schedule> {
       createdAt: fields[20] as DateTime?,
       updatedAt: fields[21] as DateTime?,
       isDaily: fields[22] as bool,
+      startDate: fields[23] as DateTime?,
+      endDate: fields[24] as DateTime?,
+      hasStartTime: fields[25] as bool? ?? true,
+      hasEndTime: fields[26] as bool? ?? true,
     );
   }
 
   @override
   void write(BinaryWriter writer, Schedule obj) {
     writer
-      ..writeByte(23)
+      ..writeByte(27)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -92,7 +96,15 @@ class ScheduleAdapter extends TypeAdapter<Schedule> {
       ..writeByte(21)
       ..write(obj.updatedAt)
       ..writeByte(22)
-      ..write(obj.isDaily);
+      ..write(obj.isDaily)
+      ..writeByte(23)
+      ..write(obj.startDate)
+      ..writeByte(24)
+      ..write(obj.endDate)
+      ..writeByte(25)
+      ..write(obj.hasStartTime)
+      ..writeByte(26)
+      ..write(obj.hasEndTime);
   }
 
   @override

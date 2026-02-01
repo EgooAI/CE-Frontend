@@ -4,6 +4,7 @@ import '../../../models/schedule/schedule.dart';
 import '../../../models/schedule/recurrence_rule.dart';
 import '../../../services/schedule/schedule_service.dart';
 import '../../../widgets/schedule/create_schedule_bottom_sheet.dart';
+import '../../../utils/crud_force_refresh.dart';
 
 /// 重复日程模板列表页面
 class RecurringSchedulesPage extends StatefulWidget {
@@ -28,6 +29,10 @@ class _RecurringSchedulesPageState extends State<RecurringSchedulesPage> {
     setState(() {
       _templatesFuture = _scheduleService.getTemplates();
     });
+  }
+
+  Future<void> _refreshTemplates() async {
+    _loadTemplates();
   }
 
   void _toggleExpanded(String id) {
@@ -131,9 +136,12 @@ class _RecurringSchedulesPageState extends State<RecurringSchedulesPage> {
     final action = result['action'] ?? 'none';
 
     try {
-      await _scheduleService.deleteRecurrenceTemplate(
-        template.id,
-        deleteInstances: action,
+      await runCrudWithForceRefresh(
+        action: () => _scheduleService.deleteRecurrenceTemplate(
+          template.id,
+          deleteInstances: action,
+        ),
+        forceRefresh: _refreshTemplates,
       );
 
       if (mounted) {
@@ -148,8 +156,6 @@ class _RecurringSchedulesPageState extends State<RecurringSchedulesPage> {
           ),
         );
       }
-
-      _loadTemplates();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -210,7 +216,10 @@ class _RecurringSchedulesPageState extends State<RecurringSchedulesPage> {
     try {
       if (isCreate) {
         // 新建
-        await _scheduleService.createSchedule(schedule.toJson());
+        await runCrudWithForceRefresh(
+          action: () => _scheduleService.createSchedule(schedule.toJson()),
+          forceRefresh: _refreshTemplates,
+        );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -223,13 +232,20 @@ class _RecurringSchedulesPageState extends State<RecurringSchedulesPage> {
       } else {
         // 编辑：模板不需要范围选择，直接更新模板系列配置；实例走单条更新
         if (template != null && template.parentId == null) {
-          await _scheduleService.updateRecurrenceSeries(
-            template.id,
-            schedule.toJson(),
+          await runCrudWithForceRefresh(
+            action: () => _scheduleService.updateRecurrenceSeries(
+              template.id,
+              schedule.toJson(),
+            ),
+            forceRefresh: _refreshTemplates,
           );
         } else {
           // 普通实例或非模板，直接更新单条
-          await _scheduleService.updateSchedule(schedule.id, schedule.toJson());
+          await runCrudWithForceRefresh(
+            action: () =>
+                _scheduleService.updateSchedule(schedule.id, schedule.toJson()),
+            forceRefresh: _refreshTemplates,
+          );
         }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -241,9 +257,6 @@ class _RecurringSchedulesPageState extends State<RecurringSchedulesPage> {
           );
         }
       }
-
-      // 刷新列表
-      _loadTemplates();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

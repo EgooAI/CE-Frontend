@@ -6,12 +6,14 @@ import '../../services/core/auth_service.dart';
 import '../../services/schedule/schedule_service.dart';
 import '../../services/sync/sync_queue_service.dart';
 import '../../widgets/schedule/create_schedule_bottom_sheet.dart';
+import '../../widgets/schedule/schedule_card.dart';
 import '../../widgets/common/offline_banner.dart';
 import '../../widgets/common/sync_indicator.dart';
 import '../../widgets/task/task_schedule_type_dropdown.dart';
 import '../../widgets/task/task_error_view.dart';
 import '../../widgets/task/task_batch_action_bar.dart';
 import '../../widgets/task/task_list_view.dart';
+import '../../utils/crud_force_refresh.dart';
 import '../main_page.dart';
 
 /// 任务页面：所有日程的集中显示管理
@@ -51,18 +53,25 @@ class _TaskPageState extends State<TaskPage>
 
   // Tab 配置
   final List<TaskTab> _tabs = [
-    TaskTab(label: '即将开始', status: 'upcoming', icon: Icons.upcoming),
-    TaskTab(label: '待进行', status: 'pending', icon: Icons.pending_actions),
-    TaskTab(label: '进行中', status: 'in_progress', icon: Icons.play_circle),
+    TaskTab(label: '待办/进行中', status: 'active', icon: Icons.view_agenda),
     TaskTab(label: '已完成', status: 'completed', icon: Icons.check_circle),
     TaskTab(label: '未完成', status: 'failed', icon: Icons.warning_amber_rounded),
     TaskTab(label: '已取消', status: 'cancelled', icon: Icons.cancel),
   ];
 
+  final Map<String, bool> _activeSectionExpanded = {
+    'upcoming': true,
+    'pending': true,
+    'in_progress': true,
+  };
+  int _expandResetTick = 0;
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: _tabs.length, vsync: this);
+    _tabController.addListener(_handleTabChange);
+    _requestExpandAllActiveSections();
     _loadTasks(staleWhileRevalidate: true);
     _loadConfig();
     _listenToPendingCount();
@@ -112,6 +121,7 @@ class _TaskPageState extends State<TaskPage>
 
   @override
   void dispose() {
+    _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
     super.dispose();
   }
@@ -120,6 +130,24 @@ class _TaskPageState extends State<TaskPage>
   void refreshData() {
     _loadTasks(staleWhileRevalidate: true);
     _loadConfig();
+    _requestExpandAllActiveSections();
+  }
+
+  void _requestExpandAllActiveSections() {
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _activeSectionExpanded.updateAll((key, value) => true);
+        _expandResetTick++;
+      });
+    });
+  }
+
+  void _handleTabChange() {
+    if (!_tabController.indexIsChanging && mounted) {
+      _requestExpandAllActiveSections();
+    }
   }
 
   Future<void> _loadConfig() async {
@@ -155,12 +183,15 @@ class _TaskPageState extends State<TaskPage>
   }
 
   // 加载任务数据
-  Future<void> _loadTasks({bool staleWhileRevalidate = false}) async {
+  Future<void> _loadTasks({
+    bool staleWhileRevalidate = false,
+    bool forceRefresh = false,
+  }) async {
     setState(() {
       _errorMessage = null;
     });
 
-    if (staleWhileRevalidate) {
+    if (staleWhileRevalidate && !forceRefresh) {
       final cachedTasks = await _scheduleRepository.getCachedAllSchedules();
       if (cachedTasks != null) {
         cachedTasks.sort((a, b) => a.startTime.compareTo(b.startTime));
@@ -174,7 +205,9 @@ class _TaskPageState extends State<TaskPage>
     }
 
     try {
-      final allSchedules = await _scheduleRepository.getAllSchedules();
+      final allSchedules = await _scheduleRepository.getAllSchedules(
+        forceRefresh: forceRefresh,
+      );
 
       // 显示所有类型的日程（不区分 task/event/meeting）
       // 按开始时间排序
@@ -190,11 +223,43 @@ class _TaskPageState extends State<TaskPage>
     }
   }
 
+  Future<void> _handlePullToRefresh() async {
+    try {
+      await _loadTasks(forceRefresh: true);
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+              content: Text('已刷新'),
+              duration: Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text('刷新失败: $e'),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+      }
+    }
+  }
+
   // 根据状态筛选任务
   List<Schedule> _getTasksByStatus(
     String status,
     List<Schedule> tasksToFilter,
   ) {
+    if (status == 'active') {
+      return _getActiveTasks(tasksToFilter);
+    }
+
     if (status == 'upcoming') {
       // 即将开始：今天的待办任务
       final now = DateTime.now();
@@ -209,6 +274,42 @@ class _TaskPageState extends State<TaskPage>
     }
 
     return tasksToFilter.where((task) => task.status == status).toList();
+  }
+
+  List<Schedule> _getUpcomingTasks(List<Schedule> tasksToFilter) {
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final tomorrowStart = DateTime(now.year, now.month, now.day + 1);
+
+    return tasksToFilter.where((task) {
+      return task.status == 'pending' &&
+          !task.startTime.isBefore(todayStart) &&
+          task.startTime.isBefore(tomorrowStart);
+    }).toList();
+  }
+
+  List<Schedule> _getPendingTasks(List<Schedule> tasksToFilter) {
+    final upcomingIds = _getUpcomingTasks(
+      tasksToFilter,
+    ).map((task) => task.id).toSet();
+    return tasksToFilter.where((task) {
+      return task.status == 'pending' && !upcomingIds.contains(task.id);
+    }).toList();
+  }
+
+  List<Schedule> _getInProgressTasks(List<Schedule> tasksToFilter) {
+    return tasksToFilter.where((task) => task.status == 'in_progress').toList();
+  }
+
+  List<Schedule> _getActiveTasks(List<Schedule> tasksToFilter) {
+    final upcoming = _getUpcomingTasks(tasksToFilter);
+    final pending = _getPendingTasks(tasksToFilter);
+    final inProgress = _getInProgressTasks(tasksToFilter);
+    final unique = <String, Schedule>{};
+    for (final task in [...upcoming, ...pending, ...inProgress]) {
+      unique[task.id] = task;
+    }
+    return unique.values.toList();
   }
 
   // 切换任务卡片展开/折叠
@@ -353,7 +454,10 @@ class _TaskPageState extends State<TaskPage>
   // 创建任务
   Future<void> _handleCreate(Schedule task) async {
     try {
-      await _scheduleRepository.createSchedule(task);
+      await runCrudWithForceRefresh(
+        action: () => _scheduleRepository.createSchedule(task),
+        forceRefresh: () => _loadTasks(forceRefresh: true),
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -418,8 +522,10 @@ class _TaskPageState extends State<TaskPage>
   // 更新任务
   Future<void> _handleUpdate(String id, Schedule updatedTask) async {
     try {
-      await _scheduleRepository.updateSchedule(updatedTask);
-      await _loadTasks();
+      await runCrudWithForceRefresh(
+        action: () => _scheduleRepository.updateSchedule(updatedTask),
+        forceRefresh: () => _loadTasks(forceRefresh: true),
+      );
 
       if (mounted) {
         Future.microtask(() {
@@ -449,8 +555,10 @@ class _TaskPageState extends State<TaskPage>
   // 删除任务
   Future<void> _handleDelete(String id) async {
     try {
-      await _scheduleRepository.deleteSchedule(id);
-      await _loadTasks();
+      await runCrudWithForceRefresh(
+        action: () => _scheduleRepository.deleteSchedule(id),
+        forceRefresh: () => _loadTasks(forceRefresh: true),
+      );
 
       if (mounted) {
         Future.microtask(() {
@@ -484,11 +592,13 @@ class _TaskPageState extends State<TaskPage>
   ) async {
     try {
       final scheduleService = GetIt.instance<ScheduleService>();
-      await scheduleService.deleteRecurrenceTemplate(
-        parentId,
-        deleteInstances: deleteInstances,
+      await runCrudWithForceRefresh(
+        action: () => scheduleService.deleteRecurrenceTemplate(
+          parentId,
+          deleteInstances: deleteInstances,
+        ),
+        forceRefresh: () => _loadTasks(forceRefresh: true),
       );
-      await _loadTasks();
 
       if (mounted) {
         final deleteText =
@@ -605,14 +715,19 @@ class _TaskPageState extends State<TaskPage>
       );
     }
 
-    for (final id in idsToDelete) {
-      try {
-        await _scheduleRepository.deleteSchedule(id);
-        successCount++;
-      } catch (e) {
-        failCount++;
-      }
-    }
+    await runCrudWithForceRefresh(
+      action: () async {
+        for (final id in idsToDelete) {
+          try {
+            await _scheduleRepository.deleteSchedule(id);
+            successCount++;
+          } catch (e) {
+            failCount++;
+          }
+        }
+      },
+      forceRefresh: () => _loadTasks(forceRefresh: true),
+    );
 
     // 清空选择并刷新
     setState(() {
@@ -620,7 +735,7 @@ class _TaskPageState extends State<TaskPage>
       _isSelectionMode = false;
     });
 
-    await _loadTasks();
+    // 强刷在 runCrudWithForceRefresh 内完成
 
     // 显示结果
     if (mounted) {
@@ -644,8 +759,10 @@ class _TaskPageState extends State<TaskPage>
   Future<void> _handleStatusChange(Schedule task, String newStatus) async {
     try {
       final updatedTask = task.copyWith(status: newStatus);
-      await _scheduleRepository.updateSchedule(updatedTask);
-      await _loadTasks();
+      await runCrudWithForceRefresh(
+        action: () => _scheduleRepository.updateSchedule(updatedTask),
+        forceRefresh: () => _loadTasks(forceRefresh: true),
+      );
 
       if (mounted) {
         final statusText = newStatus == 'completed'
@@ -717,10 +834,10 @@ class _TaskPageState extends State<TaskPage>
             IconButton(
               icon: const Icon(Icons.select_all),
               onPressed: () {
-                final currentTasks = _getTasksByStatus(
-                  _tabs[_tabController.index].status,
-                  currentFilteredTasks,
-                );
+                final currentStatus = _tabs[_tabController.index].status;
+                final currentTasks = currentStatus == 'active'
+                    ? _getActiveTasks(currentFilteredTasks)
+                    : _getTasksByStatus(currentStatus, currentFilteredTasks);
                 _toggleSelectAll(currentTasks);
               },
               tooltip: '全选',
@@ -747,10 +864,9 @@ class _TaskPageState extends State<TaskPage>
           indicatorColor: const Color(0xFF1F2329),
           tabs: _tabs.map((tab) {
             // final tasks = _getTasksByStatus(tab.status);
-            final tasks = _getTasksByStatus(
-              tab.status,
-              currentFilteredTasks,
-            ); // 传入新列表
+            final tasks = tab.status == 'active'
+                ? _getActiveTasks(currentFilteredTasks)
+                : _getTasksByStatus(tab.status, currentFilteredTasks);
             return Tab(
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -800,10 +916,12 @@ class _TaskPageState extends State<TaskPage>
                         controller: _tabController,
                         children: _tabs
                             .map(
-                              (tab) => _buildTaskList(
-                                tab.status,
-                                currentFilteredTasks,
-                              ),
+                              (tab) => tab.status == 'active'
+                                  ? _buildCombinedTaskList(currentFilteredTasks)
+                                  : _buildTaskList(
+                                      tab.status,
+                                      currentFilteredTasks,
+                                    ),
                             )
                             .toList(),
                       ),
@@ -853,8 +971,218 @@ class _TaskPageState extends State<TaskPage>
       onStatusChanged: _handleStatusChange,
       onEdit: _showEditDialog,
       onDelete: _showDeleteConfirmDialog,
+      onRefresh: _handlePullToRefresh,
       formatDateTime: _formatDateTime,
       buildStatusBadge: _buildStatusBadge,
+    );
+  }
+
+  Widget _buildCombinedTaskList(List<Schedule> tasksToFilter) {
+    final upcoming = _getUpcomingTasks(tasksToFilter)
+      ..sort((a, b) => a.startTime.compareTo(b.startTime));
+    final pending = _getPendingTasks(tasksToFilter)
+      ..sort((a, b) => a.startTime.compareTo(b.startTime));
+    final inProgress = _getInProgressTasks(tasksToFilter)
+      ..sort((a, b) => a.startTime.compareTo(b.startTime));
+
+    final allTasks = [...upcoming, ...pending, ...inProgress];
+
+    if (allTasks.isEmpty) {
+      final emptyInfo = _getEmptyInfo('active');
+      return TaskListView(
+        tasks: const [],
+        isSelectionMode: _isSelectionMode,
+        selectedTaskIds: _selectedTaskIds,
+        expandedTaskIds: _expandedTaskIds,
+        use24HourFormat: _use24HourFormat,
+        emptyIcon: emptyInfo.icon,
+        emptyMessage: emptyInfo.message,
+        showCreateButton: true,
+        onCreate: _showCreateDialog,
+        onToggleTaskSelection: _toggleTaskSelection,
+        onToggleTaskExpanded: _toggleTaskExpanded,
+        onStatusChanged: _handleStatusChange,
+        onEdit: _showEditDialog,
+        onDelete: _showDeleteConfirmDialog,
+        onRefresh: _handlePullToRefresh,
+        formatDateTime: _formatDateTime,
+        buildStatusBadge: _buildStatusBadge,
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _handlePullToRefresh,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.fromLTRB(
+          12,
+          12,
+          12,
+          _isSelectionMode && _selectedTaskIds.isNotEmpty ? 80 : 12,
+        ),
+        children: [
+          _buildActiveSection(
+            key: 'upcoming',
+            title: '即将开始',
+            icon: Icons.upcoming,
+            color: Colors.orange,
+            tasks: upcoming,
+          ),
+          const SizedBox(height: 8),
+          _buildActiveSection(
+            key: 'pending',
+            title: '待进行',
+            icon: Icons.pending_actions,
+            color: Colors.grey,
+            tasks: pending,
+          ),
+          const SizedBox(height: 8),
+          _buildActiveSection(
+            key: 'in_progress',
+            title: '进行中',
+            icon: Icons.play_circle,
+            color: Colors.blue,
+            tasks: inProgress,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActiveSection({
+    required String key,
+    required String title,
+    required IconData icon,
+    required Color color,
+    required List<Schedule> tasks,
+  }) {
+    final isExpanded = _activeSectionExpanded[key] ?? true;
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: Material(
+        color: Colors.transparent,
+        child: ExpansionTile(
+          key: PageStorageKey<String>('active_${key}_$_expandResetTick'),
+          initiallyExpanded: isExpanded,
+          onExpansionChanged: (expanded) {
+            setState(() {
+              _activeSectionExpanded[key] = expanded;
+            });
+          },
+          tilePadding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          collapsedBackgroundColor: Colors.transparent,
+          backgroundColor: Colors.transparent,
+          title: Row(
+            children: [
+              Icon(icon, color: color, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '${tasks.length}',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: color.withOpacity(0.75),
+                ),
+              ),
+            ],
+          ),
+          children: tasks.isEmpty
+              ? const [SizedBox.shrink()]
+              : [
+                  Column(
+                    children: tasks
+                        .map(
+                          (task) => Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: _buildTaskItem(task),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTaskItem(Schedule task) {
+    final isExpanded = _expandedTaskIds.contains(task.id);
+    final isSelected = _isSelectionMode && _selectedTaskIds.contains(task.id);
+
+    if (_isSelectionMode) {
+      return InkWell(
+        onTap: () => _toggleTaskSelection(task.id),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(
+              color: isSelected ? Colors.blue : Colors.grey.shade300,
+              width: isSelected ? 2 : 1,
+            ),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              if (isSelected)
+                BoxShadow(
+                  color: Colors.blue.withOpacity(0.2),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+            ],
+          ),
+          child: ListTile(
+            leading: Checkbox(
+              value: isSelected,
+              onChanged: (_) => _toggleTaskSelection(task.id),
+            ),
+            title: Text(
+              task.title,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 4),
+                Text(
+                  _formatDateTime(task.startTime),
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
+                if (task.description != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    task.description!,
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+            trailing: _buildStatusBadge(task.status),
+          ),
+        ),
+      );
+    }
+
+    return ScheduleCard(
+      schedule: task,
+      isExpanded: isExpanded,
+      onTap: () => _toggleTaskExpanded(task.id),
+      onStatusChanged: (newStatus) => _handleStatusChange(task, newStatus),
+      onEdit: () => _showEditDialog(task),
+      onDelete: () => _showDeleteConfirmDialog(task),
+      use24HourFormat: _use24HourFormat,
     );
   }
 
@@ -879,6 +1207,8 @@ class _TaskPageState extends State<TaskPage>
   // 获取空状态信息
   EmptyInfo _getEmptyInfo(String status) {
     switch (status) {
+      case 'active':
+        return EmptyInfo(icon: Icons.view_agenda, message: '暂无待办或进行中的任务');
       case 'upcoming':
         return EmptyInfo(icon: Icons.today, message: '今天没有即将开始的任务');
       case 'pending':

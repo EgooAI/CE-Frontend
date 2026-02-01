@@ -2,6 +2,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import '../common/unified_press.dart';
 import '../../models/chat/conversation.dart';
 
 /// 会话侧边菜单组件
@@ -172,8 +173,8 @@ class ConversationDrawer extends StatelessWidget {
   ) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 0.0),
-      child: GestureDetector(
-        onLongPress: () =>
+      child: UnifiedPress(
+        onActivate: () =>
             _showConversationActions(context, conversation, index),
         child: ListTile(
           title: Text(conversation.title),

@@ -11,6 +11,7 @@ import '../../widgets/daily/daily_error_view.dart';
 import '../../widgets/daily/daily_empty_state.dart';
 import '../../widgets/daily/daily_task_group_list.dart';
 import '../../widgets/daily/daily_task_details_drawer.dart';
+import '../../utils/crud_force_refresh.dart';
 
 /// 日常任务页面 - 主页面
 class DailyPage extends StatefulWidget {
@@ -109,10 +110,26 @@ class _DailyPageState extends State<DailyPage> {
     }
   }
 
-  Future<void> _loadTasks({bool staleWhileRevalidate = false}) async {
+  Future<void> _loadTasks({
+    bool staleWhileRevalidate = false,
+    bool forceRefresh = false,
+  }) async {
     setState(() {
       _errorMessage = null;
     });
+
+    if (forceRefresh) {
+      final tasks = await _dailyTaskRepository.getDailyTasks(
+        status: _dailyTaskStatusFilter,
+        forceRefresh: true,
+      );
+      if (mounted) {
+        setState(() {
+          _tasks = tasks;
+        });
+      }
+      return;
+    }
 
     if (staleWhileRevalidate) {
       final cachedTasks = await _dailyTaskRepository.getCachedDailyTasks(
@@ -160,11 +177,18 @@ class _DailyPageState extends State<DailyPage> {
   /// 创建新日常任务
   Future<void> _createNewTask() async {
     try {
-      final newTask = await _dailyTaskRepository.createDailyTask();
-      setState(() {
-        _autoFocusTaskId = newTask.id;
-      });
-      await _loadTasks();
+      DailyTask? createdTask;
+      await runCrudWithForceRefresh(
+        action: () async {
+          createdTask = await _dailyTaskRepository.createDailyTask();
+        },
+        forceRefresh: () => _loadTasks(forceRefresh: true),
+      );
+      if (createdTask != null && mounted) {
+        setState(() {
+          _autoFocusTaskId = createdTask!.id;
+        });
+      }
     } catch (e) {
       ScaffoldMessenger.of(
         context,
@@ -175,16 +199,11 @@ class _DailyPageState extends State<DailyPage> {
   /// 更新任务标题
   Future<void> _updateTaskTitle(String taskId, String newTitle) async {
     try {
-      final updatedTask = await _dailyTaskRepository.updateDailyTask(
-        taskId,
-        title: newTitle,
+      await runCrudWithForceRefresh(
+        action: () =>
+            _dailyTaskRepository.updateDailyTask(taskId, title: newTitle),
+        forceRefresh: () => _loadTasks(forceRefresh: true),
       );
-      setState(() {
-        final index = _tasks.indexWhere((t) => t.id == taskId);
-        if (index != -1) {
-          _tasks[index] = updatedTask;
-        }
-      });
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('更新成功')));
@@ -219,10 +238,10 @@ class _DailyPageState extends State<DailyPage> {
     if (confirmed != true) return;
 
     try {
-      await _dailyTaskRepository.deleteDailyTask(taskId);
-      setState(() {
-        _tasks.removeWhere((t) => t.id == taskId);
-      });
+      await runCrudWithForceRefresh(
+        action: () => _dailyTaskRepository.deleteDailyTask(taskId),
+        forceRefresh: () => _loadTasks(forceRefresh: true),
+      );
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('删除成功')));
@@ -248,6 +267,7 @@ class _DailyPageState extends State<DailyPage> {
               _tasks[index] = updatedTask;
             }
           });
+          _loadTasks(forceRefresh: true);
           Navigator.pop(context);
         },
       ),

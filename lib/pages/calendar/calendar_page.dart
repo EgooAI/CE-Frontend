@@ -13,6 +13,7 @@ import '../../widgets/common/offline_banner.dart';
 import '../../widgets/common/sync_indicator.dart';
 import '../../widgets/calendar/calendar_header_sliver.dart';
 import '../../widgets/calendar/calendar_schedule_list.dart';
+import '../../utils/crud_force_refresh.dart';
 import 'package:get_it/get_it.dart';
 // import 'package:flutter_animate/flutter_animate.dart';
 
@@ -106,58 +107,7 @@ class _CalendarPageState extends State<CalendarPage> {
 
   /// 下拉刷新（强制从 API 获取最新数据）
   Future<void> _handlePullToRefresh() async {
-    try {
-      final year = _focusedDay.year;
-      final month = _focusedDay.month;
-
-      // 使用 refreshSchedules 强制刷新，忽略缓存
-      final monthSchedules = await _scheduleRepository.refreshSchedules(
-        year: year,
-        month: month,
-      );
-
-      final schedules = monthSchedules.where((s) => s.type != 'daily').toList();
-
-      if (_showDailyTasksInCalendar) {
-        try {
-          final tasks = await _dailyTaskRepository.getDailyTasks(
-            status: 'active',
-            forceRefresh: true,
-          );
-          setState(() {
-            _dailyTasks = tasks;
-          });
-        } catch (e) {
-          debugPrint('加载日常任务失败: $e');
-        }
-      }
-
-      // 将日程转换为 Map
-      final scheduleMap = <DateTime, List<Schedule>>{};
-      for (final schedule in schedules) {
-        final date = DateTime(
-          schedule.startTime.year,
-          schedule.startTime.month,
-          schedule.startTime.day,
-        );
-        scheduleMap.putIfAbsent(date, () => []).add(schedule);
-      }
-
-      if (mounted) {
-        setState(() {
-          _scheduleMap = scheduleMap;
-        });
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('刷新成功')));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('刷新失败: $e')));
-      }
-    }
+    await _forceRefreshSchedules(showSnackBar: true);
   }
 
   Future<void> _loadConfig() async {
@@ -201,7 +151,12 @@ class _CalendarPageState extends State<CalendarPage> {
   }
 
   // 加载日程数据
-  Future<void> _loadSchedules() async {
+  Future<void> _loadSchedules({bool forceRefresh = false}) async {
+    if (forceRefresh) {
+      await _forceRefreshSchedules();
+      return;
+    }
+
     try {
       final year = _focusedDay.year;
       final month = _focusedDay.month;
@@ -267,6 +222,53 @@ class _CalendarPageState extends State<CalendarPage> {
       }
     } catch (e) {
       // 加载失败不设置状态，保持现有数据
+    }
+  }
+
+  Future<void> _forceRefreshSchedules({bool showSnackBar = false}) async {
+    try {
+      final year = _focusedDay.year;
+      final month = _focusedDay.month;
+
+      // 使用 refreshSchedules 强制刷新，忽略缓存
+      final monthSchedules = await _scheduleRepository.refreshSchedules(
+        year: year,
+        month: month,
+      );
+
+      final schedules = monthSchedules.where((s) => s.type != 'daily').toList();
+
+      List<DailyTask> loadedDailyTasks = [];
+      if (_showDailyTasksInCalendar) {
+        try {
+          loadedDailyTasks = await _dailyTaskRepository.getDailyTasks(
+            status: 'active',
+            forceRefresh: true,
+          );
+        } catch (e) {
+          debugPrint('加载日常任务失败: $e');
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _scheduleMap = _buildScheduleMap(schedules);
+          _dailyTasks = loadedDailyTasks;
+          _scheduleUpdateCount++;
+        });
+        if (showSnackBar) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('刷新成功')));
+        }
+      }
+    } catch (e) {
+      if (mounted && showSnackBar) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('刷新失败: $e')));
+      }
+      rethrow;
     }
   }
 
@@ -533,10 +535,10 @@ class _CalendarPageState extends State<CalendarPage> {
   // 创建日程
   Future<void> _handleCreate(Schedule schedule) async {
     try {
-      await _scheduleRepository.createSchedule(schedule);
-
-      // 刷新列表
-      await _loadSchedules();
+      await runCrudWithForceRefresh(
+        action: () => _scheduleRepository.createSchedule(schedule),
+        forceRefresh: _forceRefreshSchedules,
+      );
 
       if (mounted) {
         Future.microtask(() {
@@ -567,10 +569,10 @@ class _CalendarPageState extends State<CalendarPage> {
   // 更新日程
   Future<void> _handleUpdate(String id, Schedule updatedSchedule) async {
     try {
-      await _scheduleRepository.updateSchedule(updatedSchedule);
-
-      // 刷新列表
-      await _loadSchedules();
+      await runCrudWithForceRefresh(
+        action: () => _scheduleRepository.updateSchedule(updatedSchedule),
+        forceRefresh: _forceRefreshSchedules,
+      );
 
       if (mounted) {
         Future.microtask(() {
@@ -603,10 +605,10 @@ class _CalendarPageState extends State<CalendarPage> {
   // 删除日程
   Future<void> _handleDelete(String id, {bool showSnackBar = true}) async {
     try {
-      await _scheduleRepository.deleteSchedule(id);
-
-      // 刷新列表
-      await _loadSchedules();
+      await runCrudWithForceRefresh(
+        action: () => _scheduleRepository.deleteSchedule(id),
+        forceRefresh: _forceRefreshSchedules,
+      );
 
       if (mounted && showSnackBar) {
         Future.microtask(() {
@@ -642,13 +644,13 @@ class _CalendarPageState extends State<CalendarPage> {
     String deleteInstances,
   ) async {
     try {
-      await _scheduleService.deleteRecurrenceTemplate(
-        parentId,
-        deleteInstances: deleteInstances,
+      await runCrudWithForceRefresh(
+        action: () => _scheduleService.deleteRecurrenceTemplate(
+          parentId,
+          deleteInstances: deleteInstances,
+        ),
+        forceRefresh: _forceRefreshSchedules,
       );
-
-      // 刷新列表
-      await _loadSchedules();
 
       if (mounted) {
         final deleteText =
@@ -686,11 +688,10 @@ class _CalendarPageState extends State<CalendarPage> {
     try {
       // 创建更新后的日程对象
       final updatedSchedule = schedule.copyWith(status: newStatus);
-
-      await _scheduleRepository.updateSchedule(updatedSchedule);
-
-      // 刷新列表
-      await _loadSchedules();
+      await runCrudWithForceRefresh(
+        action: () => _scheduleRepository.updateSchedule(updatedSchedule),
+        forceRefresh: _forceRefreshSchedules,
+      );
 
       if (mounted) {
         final statusText = newStatus == 'completed'

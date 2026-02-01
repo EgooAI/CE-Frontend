@@ -46,9 +46,12 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
   final _notesController = TextEditingController();
   final _participantsController = TextEditingController();
 
+  DateTime? _startDate;
+  DateTime? _endDate;
   DateTime? _startTime;
   DateTime? _endTime;
-  bool _isAllDay = false;
+  bool _hasStartTime = true;
+  bool _hasEndTime = false;
   String _status = 'pending';
   String? _priority = 'medium';
   String? _type = 'task';
@@ -79,9 +82,26 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
       _locationController.text = schedule.location ?? '';
       _notesController.text = schedule.notes ?? '';
       _participantsController.text = schedule.participants ?? '';
-      _startTime = schedule.startTime;
-      _endTime = schedule.endTime;
-      _isAllDay = schedule.allDay;
+      _startDate =
+          schedule.startDate ??
+          DateTime(
+            schedule.startTime.year,
+            schedule.startTime.month,
+            schedule.startTime.day,
+          );
+      _endDate =
+          schedule.endDate ??
+          (schedule.endTime != null
+              ? DateTime(
+                  schedule.endTime!.year,
+                  schedule.endTime!.month,
+                  schedule.endTime!.day,
+                )
+              : null);
+      _hasStartTime = schedule.hasStartTime;
+      _hasEndTime = schedule.hasEndTime;
+      _startTime = _hasStartTime ? schedule.startTime : null;
+      _endTime = _hasEndTime ? schedule.endTime : null;
       _status = schedule.status;
       _priority = schedule.priority ?? 'medium';
       // 普通日程不再使用 daily 类型，若后端已有 daily 则回退为 task
@@ -126,11 +146,36 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
         // DateTime.parse() 会将带时区的时间转换为 UTC
         // 需要使用 .toLocal() 转换回本地时区，保持正确的日期
         _startTime = DateTime.parse(data['startTime']).toLocal();
+        _hasStartTime = true;
+        _startDate = DateTime(
+          _startTime!.year,
+          _startTime!.month,
+          _startTime!.day,
+        );
+      }
+      if (data['startDate'] != null) {
+        final parsed = DateTime.tryParse(data['startDate']);
+        if (parsed != null) {
+          _startDate = DateTime(parsed.year, parsed.month, parsed.day);
+        }
       }
       if (data['endTime'] != null) {
         _endTime = DateTime.parse(data['endTime']).toLocal();
+        _hasEndTime = true;
+        _endDate = DateTime(_endTime!.year, _endTime!.month, _endTime!.day);
       }
-      _isAllDay = data['allDay'] ?? false;
+      if (data['endDate'] != null) {
+        final parsed = DateTime.tryParse(data['endDate']);
+        if (parsed != null) {
+          _endDate = DateTime(parsed.year, parsed.month, parsed.day);
+        }
+      }
+      if (_startTime == null && _startDate != null) {
+        _hasStartTime = false;
+      }
+      if (_endTime == null && _endDate != null) {
+        _hasEndTime = false;
+      }
       _status = data['status'] ?? 'pending';
       _priority = data['priority'] ?? 'medium';
       final incomingType = data['type'] as String?;
@@ -181,8 +226,15 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
     } else {
       // 创建模式：使用默认值
       final initialDate = widget.initialDate ?? DateTime.now();
+      _startDate = DateTime(
+        initialDate.year,
+        initialDate.month,
+        initialDate.day,
+      );
       _startTime = _getSmartStartTime(initialDate);
+      _hasStartTime = true;
       _endTime = null;
+      _hasEndTime = false;
     }
   }
 
@@ -240,29 +292,39 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
     super.dispose();
   }
 
-  String _formatDateTime(DateTime dt) {
-    final dateStr =
-        '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+  String _formatDate(DateTime dt) {
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+  }
+
+  String _formatTimeOnly(DateTime dt) {
     final hh = dt.hour.toString().padLeft(2, '0');
     final mm = dt.minute.toString().padLeft(2, '0');
     if (widget.use24HourFormat) {
-      return '$dateStr $hh:$mm';
+      return '$hh:$mm';
     }
     final hour12 = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
     final period = dt.hour < 12 ? '上午' : '下午';
-    return '$dateStr $period ${hour12.toString().padLeft(2, '0')}:$mm';
+    return '$period ${hour12.toString().padLeft(2, '0')}:$mm';
   }
 
   bool get _canSave {
-    return _titleController.text.isNotEmpty && _startTime != null;
+    return _titleController.text.isNotEmpty;
   }
 
-  /// 合并的日期时间选择器（先选日期，再选时间）
-  Future<void> _selectDateTime(BuildContext context, bool isStart) async {
-    final currentTime = isStart ? _startTime : _endTime;
-    final initialDate = currentTime ?? DateTime.now();
+  String _computeStatus() {
+    final hasAnyDateOrTime =
+        _startDate != null ||
+        _endDate != null ||
+        (_hasStartTime && _startTime != null) ||
+        (_hasEndTime && _endTime != null);
+    return hasAnyDateOrTime ? 'pending' : 'in_progress';
+  }
 
-    // 第一步：选择日期
+  /// 合并的日期时间选择器（先选日期，再选择是否有时间）
+  Future<void> _selectDate(BuildContext context, bool isStart) async {
+    final currentDate = isStart ? _startDate : _endDate;
+    final initialDate = currentDate ?? DateTime.now();
+
     final date = await showDatePicker(
       context: context,
       initialDate: initialDate,
@@ -272,80 +334,114 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
 
     if (date == null) return;
 
-    // 第二步：选择时间（全天事件跳过）
-    TimeOfDay? time;
-    if (!_isAllDay) {
-      final initialTime = currentTime != null
-          ? TimeOfDay(hour: currentTime.hour, minute: currentTime.minute)
-          : TimeOfDay(hour: isStart ? 9 : 10, minute: 0);
-
-      time = await showTimePicker(
-        context: context,
-        initialTime: initialTime,
-        builder: (context, child) {
-          return MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(alwaysUse24HourFormat: widget.use24HourFormat),
-            child: child ?? const SizedBox.shrink(),
-          );
-        },
-      );
-
-      if (time == null) return;
-    }
-
-    // 合并日期和时间
     setState(() {
       if (isStart) {
-        _startTime = DateTime(
-          date.year,
-          date.month,
-          date.day,
-          time?.hour ?? 0,
-          time?.minute ?? 0,
-        );
+        _startDate = DateTime(date.year, date.month, date.day);
+        if (_hasStartTime && _startTime != null) {
+          _startTime = DateTime(
+            date.year,
+            date.month,
+            date.day,
+            _startTime!.hour,
+            _startTime!.minute,
+          );
+        }
       } else {
-        _endTime = DateTime(
-          date.year,
-          date.month,
-          date.day,
-          time?.hour ?? 23,
-          time?.minute ?? 59,
-        );
+        _endDate = DateTime(date.year, date.month, date.day);
+        if (_hasEndTime && _endTime != null) {
+          _endTime = DateTime(
+            date.year,
+            date.month,
+            date.day,
+            _endTime!.hour,
+            _endTime!.minute,
+          );
+        }
       }
+      _status = _computeStatus();
     });
   }
 
-  void _toggleAllDay(bool? value) {
-    setState(() {
-      _isAllDay = value ?? false;
-      if (_isAllDay && _startTime != null) {
-        // 全天事件：设置开始时间为 00:00:00
-        _startTime = DateTime(
-          _startTime!.year,
-          _startTime!.month,
-          _startTime!.day,
-          0,
-          0,
-          0,
+  Future<void> _selectTime(BuildContext context, bool isStart) async {
+    final currentTime = isStart ? _startTime : _endTime;
+    final initialTime = currentTime != null
+        ? TimeOfDay(hour: currentTime.hour, minute: currentTime.minute)
+        : TimeOfDay(hour: isStart ? 9 : 10, minute: 0);
+
+    final time = await showTimePicker(
+      context: context,
+      initialTime: initialTime,
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(alwaysUse24HourFormat: widget.use24HourFormat),
+          child: child ?? const SizedBox.shrink(),
         );
-        // 自动设置结束时间为 23:59:59
+      },
+    );
+
+    if (time == null) return;
+
+    setState(() {
+      if (isStart) {
+        final baseDate = _startDate ?? DateTime.now();
+        _startDate ??= DateTime(baseDate.year, baseDate.month, baseDate.day);
+        _hasStartTime = true;
+        _startTime = DateTime(
+          _startDate!.year,
+          _startDate!.month,
+          _startDate!.day,
+          time.hour,
+          time.minute,
+        );
+      } else {
+        final baseDate = _endDate ?? _startDate ?? DateTime.now();
+        _endDate ??= DateTime(baseDate.year, baseDate.month, baseDate.day);
+        _hasEndTime = true;
         _endTime = DateTime(
-          _startTime!.year,
-          _startTime!.month,
-          _startTime!.day,
-          23,
-          59,
-          59,
+          _endDate!.year,
+          _endDate!.month,
+          _endDate!.day,
+          time.hour,
+          time.minute,
         );
       }
+      _status = _computeStatus();
+    });
+  }
+
+  void _clearStartDate() {
+    setState(() {
+      _startDate = null;
+      _startTime = null;
+      _hasStartTime = false;
+      _status = _computeStatus();
+    });
+  }
+
+  void _clearStartTime() {
+    setState(() {
+      _startTime = null;
+      _hasStartTime = false;
+      _status = _computeStatus();
+    });
+  }
+
+  void _clearEndDate() {
+    setState(() {
+      _endDate = null;
+      _endTime = null;
+      _hasEndTime = false;
+      _status = _computeStatus();
     });
   }
 
   void _clearEndTime() {
     setState(() {
       _endTime = null;
+      _hasEndTime = false;
+      _status = _computeStatus();
     });
   }
 
@@ -353,11 +449,30 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
     if (_titleController.text.trim().isEmpty) {
       return '请输入日程标题';
     }
-    if (_startTime == null) {
+    if (_hasStartTime && _startTime == null) {
       return '请选择开始时间';
     }
-    if (_endTime != null && !_endTime!.isAfter(_startTime!)) {
-      return '结束时间必须晚于开始时间';
+    if (_hasEndTime && _endTime == null) {
+      return '请选择结束时间';
+    }
+    if (_endDate != null && _startDate != null) {
+      final start = DateTime(
+        _startDate!.year,
+        _startDate!.month,
+        _startDate!.day,
+      );
+      final end = DateTime(_endDate!.year, _endDate!.month, _endDate!.day);
+      if (end.isBefore(start)) {
+        return '结束日期不能早于开始日期';
+      }
+    }
+    if (_hasStartTime &&
+        _hasEndTime &&
+        _startTime != null &&
+        _endTime != null) {
+      if (!_endTime!.isAfter(_startTime!)) {
+        return '结束时间必须晚于开始时间';
+      }
     }
     return null;
   }
@@ -382,6 +497,22 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
     });
 
     try {
+      final hasAnyDateOrTime =
+          _startDate != null ||
+          _endDate != null ||
+          (_hasStartTime && _startTime != null) ||
+          (_hasEndTime && _endTime != null);
+
+      final resolvedStartDate = _startDate;
+      final resolvedStartTime = _hasStartTime && _startTime != null
+          ? _startTime!
+          : (_startDate != null
+                ? DateTime(_startDate!.year, _startDate!.month, _startDate!.day)
+                : DateTime.now());
+      final resolvedEndDate = _endDate;
+      final resolvedEndTime = _hasEndTime ? _endTime : null;
+      final effectiveStatus = !hasAnyDateOrTime ? 'in_progress' : _status;
+
       // 构建 Schedule 对象
       final schedule = Schedule(
         id: widget.existingSchedule?.id ?? '',
@@ -390,13 +521,17 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
         description: _descriptionController.text.trim().isEmpty
             ? null
             : _descriptionController.text.trim(),
-        startTime: _startTime!,
-        endTime: _endTime, // 不设置默认值，可以为 null
-        allDay: _isAllDay,
+        startTime: resolvedStartTime,
+        endTime: resolvedEndTime, // 不设置默认值，可以为 null
+        allDay: _startDate != null && !_hasStartTime && !_hasEndTime,
+        startDate: resolvedStartDate,
+        endDate: resolvedEndDate,
+        hasStartTime: _hasStartTime,
+        hasEndTime: _hasEndTime,
         location: _locationController.text.trim().isEmpty
             ? null
             : _locationController.text.trim(),
-        status: _status,
+        status: effectiveStatus,
         type: _type,
         priority: _priority,
         notes: _notesController.text.trim().isEmpty
@@ -493,8 +628,6 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
                         _buildDateTimeSection(),
                         const SizedBox(height: 16),
                         _buildRemindBeforeField(),
-                        const SizedBox(height: 16),
-                        _buildAllDaySwitch(),
                       ]),
                       _buildGroupCard([
                         _buildStatusSection(),
@@ -570,29 +703,93 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 开始时间（方形框）
+        // 开始日期
         GestureDetector(
-          onTap: () => _selectDateTime(context, true),
+          onTap: () => _selectDate(context, true),
           child: InputDecorator(
-            decoration: _inputDecoration(label: '开始时间 *', icon: Icons.event),
+            decoration: _inputDecoration(
+              label: '开始日期（可选）',
+              icon: Icons.event,
+              suffixIcon: _startDate != null
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, size: 20),
+                      onPressed: _clearStartDate,
+                      tooltip: '清空开始日期',
+                    )
+                  : null,
+            ),
             child: Text(
-              _startTime != null ? _formatDateTime(_startTime!) : '请选择开始时间',
+              _startDate != null ? _formatDate(_startDate!) : '请选择开始日期',
               style: TextStyle(
-                color: _startTime != null ? Colors.black87 : Colors.grey,
+                color: _startDate != null ? Colors.black87 : Colors.grey,
               ),
             ),
           ),
         ),
         const SizedBox(height: 12),
 
-        // 结束时间（方形框，带内部清空按钮）
+        // 开始时间（可选）
         GestureDetector(
-          onTap: () => _selectDateTime(context, false),
+          onTap: () => _selectTime(context, true),
+          child: InputDecorator(
+            decoration: _inputDecoration(
+              label: '开始时间（可选）',
+              icon: Icons.schedule,
+              suffixIcon: _hasStartTime && _startTime != null
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, size: 20),
+                      onPressed: _clearStartTime,
+                      tooltip: '清空开始时间',
+                    )
+                  : null,
+            ),
+            child: Text(
+              _hasStartTime && _startTime != null
+                  ? _formatTimeOnly(_startTime!)
+                  : '选择开始时间',
+              style: TextStyle(
+                color: _hasStartTime && _startTime != null
+                    ? Colors.black87
+                    : Colors.grey,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // 结束日期（可选）
+        GestureDetector(
+          onTap: () => _selectDate(context, false),
+          child: InputDecorator(
+            decoration: _inputDecoration(
+              label: '结束日期（可选）',
+              icon: Icons.event_available,
+              suffixIcon: _endDate != null
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, size: 20),
+                      onPressed: _clearEndDate,
+                      tooltip: '清空结束日期',
+                    )
+                  : null,
+            ),
+            child: Text(
+              _endDate != null ? _formatDate(_endDate!) : '选择结束日期',
+              style: TextStyle(
+                color: _endDate != null ? Colors.black87 : Colors.grey,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // 结束时间（可选）
+        GestureDetector(
+          onTap: () => _selectTime(context, false),
           child: InputDecorator(
             decoration: _inputDecoration(
               label: '结束时间（可选）',
-              icon: Icons.event_available,
-              suffixIcon: _endTime != null
+              icon: Icons.access_time,
+              suffixIcon: _hasEndTime && _endTime != null
                   ? IconButton(
                       icon: const Icon(Icons.clear, size: 20),
                       onPressed: _clearEndTime,
@@ -601,23 +798,18 @@ class _CreateScheduleBottomSheetState extends State<CreateScheduleBottomSheet> {
                   : null,
             ),
             child: Text(
-              _endTime != null ? _formatDateTime(_endTime!) : '选择结束时间',
+              _hasEndTime && _endTime != null
+                  ? _formatTimeOnly(_endTime!)
+                  : '选择结束时间',
               style: TextStyle(
-                color: _endTime != null ? Colors.black87 : Colors.grey,
+                color: _hasEndTime && _endTime != null
+                    ? Colors.black87
+                    : Colors.grey,
               ),
             ),
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildAllDaySwitch() {
-    return SwitchListTile(
-      title: const Text('全天事件'),
-      value: _isAllDay,
-      onChanged: _toggleAllDay,
-      secondary: const Icon(Icons.event_available),
     );
   }
 

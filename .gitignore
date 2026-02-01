@@ -88,3 +88,4 @@ app.*.map.json
 **.md
 !readme.md
 docs/**
+.github/instructions/default.instructions.md
