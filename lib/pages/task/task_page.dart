@@ -970,6 +970,7 @@ class _TaskPageState extends State<TaskPage>
       onToggleTaskExpanded: _toggleTaskExpanded,
       onStatusChanged: _handleStatusChange,
       onEdit: _showEditDialog,
+      onUpdate: (updatedTask) => _handleUpdate(updatedTask.id, updatedTask),
       onDelete: _showDeleteConfirmDialog,
       onRefresh: _handlePullToRefresh,
       formatDateTime: _formatDateTime,
@@ -1003,6 +1004,7 @@ class _TaskPageState extends State<TaskPage>
         onToggleTaskExpanded: _toggleTaskExpanded,
         onStatusChanged: _handleStatusChange,
         onEdit: _showEditDialog,
+        onUpdate: (updatedTask) => _handleUpdate(updatedTask.id, updatedTask),
         onDelete: _showDeleteConfirmDialog,
         onRefresh: _handlePullToRefresh,
         formatDateTime: _formatDateTime,
@@ -1181,6 +1183,7 @@ class _TaskPageState extends State<TaskPage>
       onTap: () => _toggleTaskExpanded(task.id),
       onStatusChanged: (newStatus) => _handleStatusChange(task, newStatus),
       onEdit: () => _showEditDialog(task),
+      onUpdate: (updatedTask) => _handleUpdate(task.id, updatedTask),
       onDelete: () => _showDeleteConfirmDialog(task),
       use24HourFormat: _use24HourFormat,
     );

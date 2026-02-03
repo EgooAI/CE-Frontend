@@ -277,12 +277,12 @@ class _CalendarPageState extends State<CalendarPage> {
     final map = <DateTime, List<Schedule>>{};
 
     for (var schedule in schedules) {
+      if (!schedule.hasStartTime && schedule.startDate == null) {
+        continue;
+      }
       // 标准化日期（去掉时分秒）
-      final date = DateTime(
-        schedule.startTime.year,
-        schedule.startTime.month,
-        schedule.startTime.day,
-      );
+      final baseDate = schedule.startDate ?? schedule.startTime;
+      final date = DateTime(baseDate.year, baseDate.month, baseDate.day);
 
       if (map[date] == null) {
         map[date] = [];
@@ -798,6 +798,8 @@ class _CalendarPageState extends State<CalendarPage> {
                     onToggleScheduleExpanded: _toggleScheduleExpanded,
                     onStatusChanged: _handleStatusChange,
                     onEditSchedule: _showEditDialog,
+                    onUpdateSchedule: (updatedSchedule) =>
+                        _handleUpdate(updatedSchedule.id, updatedSchedule),
                     onDeleteSchedule: _showDeleteConfirmDialog,
                   ),
 

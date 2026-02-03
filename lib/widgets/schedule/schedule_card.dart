@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import '../../models/schedule/schedule.dart';
 import '../../models/schedule/recurrence_rule.dart';
+import '../common/native_context_menu.dart';
+
+enum _DateMenuAction { today, tomorrow, nextMonday, pick, clear }
 
 class ScheduleCard extends StatefulWidget {
   final Schedule schedule;
@@ -12,6 +15,7 @@ class ScheduleCard extends StatefulWidget {
   final Function(String newStatus)? onStatusChanged; // 状态变更回调
   final VoidCallback? onEdit; // 编辑回调
   final VoidCallback? onDelete; // 删除回调
+  final Future<void> Function(Schedule updatedSchedule)? onUpdate; // 快速更新回调
   final bool use24HourFormat;
 
   const ScheduleCard({
@@ -22,6 +26,7 @@ class ScheduleCard extends StatefulWidget {
     this.onStatusChanged,
     this.onEdit,
     this.onDelete,
+    this.onUpdate,
     this.use24HourFormat = true,
   });
 
@@ -30,257 +35,459 @@ class ScheduleCard extends StatefulWidget {
 }
 
 class _ScheduleCardState extends State<ScheduleCard> {
-  String? _pendingAction; // 'completed', 'cancelled', 'in_progress'
-  bool _isConfirming = false;
-
-  // 第一次点击：显示确认按钮
-  void _handleFirstClick(String action) {
-    setState(() {
-      _pendingAction = action;
-      _isConfirming = true;
-    });
-
-    // 显示确认提示
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('确认吗？再次点击确认'),
-        duration: Duration(seconds: 3),
-      ),
-    );
-
-    // 3秒后自动取消确认状态
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted && _isConfirming) {
-        setState(() {
-          _pendingAction = null;
-          _isConfirming = false;
-        });
-      }
-    });
+  DateTime _normalizeDate(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
   }
 
-  // 第二次点击：执行操作
-  void _handleSecondClick(String action) {
-    if (widget.onStatusChanged != null) {
-      widget.onStatusChanged!(action);
+  Future<void> _applyQuickUpdate(Schedule updatedSchedule) async {
+    if (widget.onUpdate != null) {
+      await widget.onUpdate!(updatedSchedule);
+    } else {
+      widget.onEdit?.call();
     }
-    setState(() {
-      _pendingAction = null;
-      _isConfirming = false;
-    });
   }
 
-  // 构建快速操作按钮
-  Widget _buildQuickActionButtons() {
-    final status = widget.schedule.status;
+  Future<void> _handleDateAction(_DateMenuAction action) async {
+    late DateTime selectedDate;
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // 编辑按钮（展开时显示，所有状态都可以编辑）
-        if (widget.isExpanded && widget.onEdit != null)
-          IconButton(
-            icon: const Icon(Icons.edit, size: 18),
-            onPressed: widget.onEdit,
-            tooltip: '编辑',
-            padding: const EdgeInsets.all(4),
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          ),
+    switch (action) {
+      case _DateMenuAction.today:
+        selectedDate = _normalizeDate(DateTime.now());
+        break;
+      case _DateMenuAction.tomorrow:
+        selectedDate = _normalizeDate(
+          DateTime.now().add(const Duration(days: 1)),
+        );
+        break;
+      case _DateMenuAction.nextMonday:
+        final now = DateTime.now();
+        final daysUntilMonday = (8 - now.weekday) % 7;
+        final offset = daysUntilMonday == 0 ? 7 : daysUntilMonday;
+        selectedDate = _normalizeDate(now.add(Duration(days: offset)));
+        break;
+      case _DateMenuAction.pick:
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: _normalizeDate(widget.schedule.startTime),
+          firstDate: DateTime(2020, 1, 1),
+          lastDate: DateTime(2035, 12, 31),
+        );
+        if (picked == null) return;
+        selectedDate = _normalizeDate(picked);
+        break;
+      case _DateMenuAction.clear:
+        final updated = widget.schedule.copyWith(
+          clearStartDate: true,
+          clearEndDate: true,
+          hasStartTime: false,
+          hasEndTime: false,
+        );
+        await _applyQuickUpdate(updated);
+        return;
+    }
 
-        // 删除按钮（展开时显示）
-        if (widget.isExpanded && widget.onDelete != null)
-          IconButton(
-            icon: const Icon(Icons.delete_outline, size: 18),
-            onPressed: widget.onDelete,
-            tooltip: '删除',
-            padding: const EdgeInsets.all(4),
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            color: Colors.red,
-          ),
-
-        // 已完成或已取消的日程不显示状态按钮
-        if (status != 'completed' && status != 'cancelled') ...[
-          const SizedBox(width: 4),
-
-          // 开始按钮（仅待办状态显示）
-          if (status == 'pending')
-            _buildActionButton(
-              action: 'in_progress',
-              icon: Icons.play_arrow,
-              label: '开始',
-              color: Colors.blue,
-            ),
-
-          if (status == 'pending') const SizedBox(width: 4),
-
-          // 完成按钮
-          _buildActionButton(
-            action: 'completed',
-            icon: Icons.check,
-            label: '完成',
-            color: Colors.green,
-          ),
-
-          const SizedBox(width: 4),
-
-          // 取消按钮
-          _buildActionButton(
-            action: 'cancelled',
-            icon: Icons.close,
-            label: '取消',
-            color: Colors.red,
-          ),
-        ],
-      ],
+    final oldStart = widget.schedule.startTime;
+    final duration = widget.schedule.endTime != null
+        ? widget.schedule.endTime!.difference(widget.schedule.startTime)
+        : null;
+    final newStart = DateTime(
+      selectedDate.year,
+      selectedDate.month,
+      selectedDate.day,
+      oldStart.hour,
+      oldStart.minute,
+      oldStart.second,
+      oldStart.millisecond,
+      oldStart.microsecond,
     );
+    final newEnd = duration != null ? newStart.add(duration) : null;
+
+    final updated = widget.schedule.copyWith(
+      startTime: newStart,
+      endTime: newEnd,
+      startDate: selectedDate,
+      endDate: newEnd != null
+          ? _normalizeDate(newEnd)
+          : widget.schedule.endDate,
+      hasStartTime: true,
+      hasEndTime: widget.schedule.endTime != null
+          ? widget.schedule.hasEndTime
+          : false,
+    );
+
+    await _applyQuickUpdate(updated);
   }
 
-  // 构建单个操作按钮
-  Widget _buildActionButton({
-    required String action,
-    required IconData icon,
-    required String label,
-    required Color color,
-  }) {
-    final isConfirming = _pendingAction == action && _isConfirming;
-
-    return InkWell(
-      onTap: () {
-        if (isConfirming) {
-          _handleSecondClick(action);
-        } else {
-          _handleFirstClick(action);
-        }
-      },
-      borderRadius: BorderRadius.circular(16),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: EdgeInsets.symmetric(
-          horizontal: isConfirming ? 8 : 4,
-          vertical: 4,
-        ),
-        decoration: BoxDecoration(
-          color: isConfirming ? color.withOpacity(0.1) : Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isConfirming ? color : Colors.grey.shade300,
-            width: 1,
-          ),
-        ),
-        child: Row(
+  Future<void> _showDateMenu() async {
+    final action = await showDialog<_DateMenuAction>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('选择日期'),
+        content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16, color: color),
-            if (isConfirming) ...[
-              const SizedBox(width: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: color,
-                  fontWeight: FontWeight.w500,
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () =>
+                        Navigator.pop(context, _DateMenuAction.today),
+                    child: const Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.today, size: 20),
+                        SizedBox(height: 4),
+                        Text('今天'),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            ],
+                Expanded(
+                  child: TextButton(
+                    onPressed: () =>
+                        Navigator.pop(context, _DateMenuAction.tomorrow),
+                    child: const Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.calendar_month, size: 20),
+                        SizedBox(height: 4),
+                        Text('明天'),
+                      ],
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: TextButton(
+                    onPressed: () =>
+                        Navigator.pop(context, _DateMenuAction.nextMonday),
+                    child: const Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.event_available, size: 20),
+                        SizedBox(height: 4),
+                        Text('下周一'),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () =>
+                        Navigator.pop(context, _DateMenuAction.pick),
+                    child: const Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.date_range, size: 20),
+                        SizedBox(height: 4),
+                        Text('选择日期'),
+                      ],
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: TextButton(
+                    onPressed: () =>
+                        Navigator.pop(context, _DateMenuAction.clear),
+                    child: const Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.event_busy, size: 20),
+                        SizedBox(height: 4),
+                        Text('清除日期'),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
     );
+
+    if (action == null) return;
+    await _handleDateAction(action);
+  }
+
+  Future<void> _showTimePicker() async {
+    final initialTime = TimeOfDay.fromDateTime(widget.schedule.startTime);
+    final time = await showTimePicker(
+      context: context,
+      initialTime: initialTime,
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(alwaysUse24HourFormat: widget.use24HourFormat),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
+    );
+
+    if (time == null) return;
+
+    final date = widget.schedule.startTime;
+    final newStart = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+    );
+    final duration = widget.schedule.endTime != null
+        ? widget.schedule.endTime!.difference(widget.schedule.startTime)
+        : null;
+    final newEnd = duration != null ? newStart.add(duration) : null;
+
+    final updated = widget.schedule.copyWith(
+      startTime: newStart,
+      endTime: newEnd,
+      startDate: _normalizeDate(newStart),
+      endDate: newEnd != null
+          ? _normalizeDate(newEnd)
+          : widget.schedule.endDate,
+      hasStartTime: true,
+      hasEndTime: widget.schedule.endTime != null
+          ? widget.schedule.hasEndTime
+          : false,
+    );
+
+    await _applyQuickUpdate(updated);
+  }
+
+  Future<void> _showPriorityMenu() async {
+    final current = widget.schedule.priority ?? '';
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('选择优先级'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildPriorityOption(
+              context,
+              value: 'high',
+              label: '高',
+              color: Colors.red,
+              selected: current == 'high',
+            ),
+            _buildPriorityOption(
+              context,
+              value: 'medium',
+              label: '中',
+              color: Colors.orange,
+              selected: current == 'medium',
+            ),
+            _buildPriorityOption(
+              context,
+              value: 'low',
+              label: '低',
+              color: Colors.green,
+              selected: current == 'low',
+            ),
+            _buildPriorityOption(
+              context,
+              value: '',
+              label: '清除优先级',
+              color: Colors.grey,
+              selected: current.isEmpty,
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (selected == null) return;
+    final updated = widget.schedule.copyWith(
+      priority: selected.isEmpty ? null : selected,
+    );
+    await _applyQuickUpdate(updated);
+  }
+
+  Widget _buildPriorityOption(
+    BuildContext context, {
+    required String value,
+    required String label,
+    required Color color,
+    required bool selected,
+  }) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(Icons.flag, color: color, size: 18),
+      title: Text(label),
+      trailing: selected ? const Icon(Icons.check, size: 18) : null,
+      onTap: () => Navigator.pop(context, value),
+    );
+  }
+
+  void _toggleCompleted(bool? value) {
+    if (widget.onStatusChanged == null || value == null) return;
+    widget.onStatusChanged!(value ? 'completed' : 'pending');
   }
 
   @override
   Widget build(BuildContext context) {
-    final card = Card(
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(0)),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: widget.onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 标题行
-              Row(
-                children: [
-                  _getTypeIcon(),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      widget.schedule.title,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+    final card = NativeContextMenu(
+      actions: [
+        NativeContextMenuItem(
+          title: '进行中',
+          icon: Icons.play_arrow,
+          onSelected: () async {
+            widget.onStatusChanged?.call('in_progress');
+          },
+        ),
+        NativeContextMenuItem(
+          title: '已取消',
+          icon: Icons.cancel_outlined,
+          onSelected: () async {
+            widget.onStatusChanged?.call('cancelled');
+          },
+        ),
+        NativeContextMenuItem(
+          title: '日期',
+          icon: Icons.calendar_today,
+          onSelected: () async {
+            await _showDateMenu();
+          },
+        ),
+        NativeContextMenuItem(
+          title: '时间',
+          icon: Icons.access_time,
+          onSelected: () async {
+            await _showTimePicker();
+          },
+        ),
+        NativeContextMenuItem(
+          title: '优先级',
+          icon: Icons.flag_outlined,
+          onSelected: () async {
+            await _showPriorityMenu();
+          },
+        ),
+        NativeContextMenuItem(
+          title: '置顶',
+          icon: Icons.push_pin_outlined,
+          onSelected: () async {},
+        ),
+        NativeContextMenuItem(
+          title: '编辑',
+          icon: Icons.edit_outlined,
+          onSelected: () async {
+            widget.onEdit?.call();
+          },
+        ),
+        NativeContextMenuItem(
+          title: '删除',
+          icon: Icons.delete_outline,
+          isDestructive: true,
+          onSelected: () async {
+            widget.onDelete?.call();
+          },
+        ),
+      ],
+      child: Card(
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(0)),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: widget.onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 标题行
+                Row(
+                  children: [
+                    Checkbox(
+                      value: widget.schedule.status == 'completed',
+                      onChanged: widget.onStatusChanged == null
+                          ? null
+                          : _toggleCompleted,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    _getTypeIcon(),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        widget.schedule.title,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
-                  ),
-                  // 快速操作按钮
-                  _buildQuickActionButtons(),
-                  const SizedBox(width: 4),
-                  Icon(
-                    widget.isExpanded ? Icons.expand_less : Icons.expand_more,
-                    color: Colors.grey,
-                  ),
-                ],
-              ),
-
-              // 时间
-              const SizedBox(height: 4),
-              Text(
-                widget.schedule.getTimeDisplay(
-                  use24HourFormat: widget.use24HourFormat,
-                  useChinesePeriod: true,
-                ),
-                style: TextStyle(fontSize: 14, color: Colors.grey[700]),
-              ),
-
-              // 提醒信息
-              if (_hasReminders())
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: _buildReminderInfo(),
-                ),
-
-              // 地点、状态和重复标识
-              const SizedBox(height: 4),
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  if (widget.schedule.location != null &&
-                      widget.schedule.location!.isNotEmpty)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.location_on,
-                          size: 14,
-                          color: Colors.grey,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          widget.schedule.location!,
-                          style: const TextStyle(fontSize: 14),
-                        ),
-                      ],
+                    const SizedBox(width: 4),
+                    Icon(
+                      widget.isExpanded ? Icons.expand_less : Icons.expand_more,
+                      color: Colors.grey,
                     ),
-                  _getStatusChip(),
-                  // 重复标识
-                  if (widget.schedule.parentId != null ||
-                      (widget.schedule.recurrence != null &&
-                          widget.schedule.recurrence!.isNotEmpty))
-                    _buildRecurrenceBadge(),
-                ],
-              ),
+                  ],
+                ),
 
-              // 展开的详细信息
-              if (widget.isExpanded) ...[
-                const Divider(height: 20),
-                _buildDetailedInfo(),
+                // 时间
+                const SizedBox(height: 4),
+                Text(
+                  widget.schedule.getTimeDisplay(
+                    use24HourFormat: widget.use24HourFormat,
+                    useChinesePeriod: true,
+                  ),
+                  style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+                ),
+
+                // 提醒信息
+                if (_hasReminders())
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: _buildReminderInfo(),
+                  ),
+
+                // 地点、状态和重复标识
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    if (widget.schedule.location != null &&
+                        widget.schedule.location!.isNotEmpty)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.location_on,
+                            size: 14,
+                            color: Colors.grey,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            widget.schedule.location!,
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                        ],
+                      ),
+                    _getStatusChip(),
+                    // 重复标识
+                    if (widget.schedule.parentId != null ||
+                        (widget.schedule.recurrence != null &&
+                            widget.schedule.recurrence!.isNotEmpty))
+                      _buildRecurrenceBadge(),
+                  ],
+                ),
+
+                // 展开的详细信息
+                if (widget.isExpanded) ...[
+                  const Divider(height: 20),
+                  _buildDetailedInfo(),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),

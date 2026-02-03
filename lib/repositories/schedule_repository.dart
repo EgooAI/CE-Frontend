@@ -286,7 +286,10 @@ class ScheduleRepository {
       // 获取旧日程（用于比较月份）
       final oldSchedule = await _service.getSchedule(schedule.id);
 
-      await _service.updateSchedule(schedule.id, schedule.toJson());
+      await _service.updateSchedule(
+        schedule.id,
+        schedule.toJson(includeNulls: true),
+      );
 
       // 清除旧月份缓存
       final oldYear = oldSchedule.startTime.year;
@@ -294,10 +297,18 @@ class ScheduleRepository {
       await _invalidateMonthCache(oldYear, oldMonth);
 
       // 如果月份改变，清除新月份缓存
-      final newYear = schedule.startTime.year;
-      final newMonth = schedule.startTime.month;
-      if (oldYear != newYear || oldMonth != newMonth) {
-        await _invalidateMonthCache(newYear, newMonth);
+      DateTime? newBaseDate;
+      if (schedule.startDate != null) {
+        newBaseDate = schedule.startDate;
+      } else if (schedule.hasStartTime) {
+        newBaseDate = schedule.startTime;
+      }
+      if (newBaseDate != null) {
+        final newYear = newBaseDate.year;
+        final newMonth = newBaseDate.month;
+        if (oldYear != newYear || oldMonth != newMonth) {
+          await _invalidateMonthCache(newYear, newMonth);
+        }
       }
 
       print('[ScheduleRepository] 日程更新成功，已清除缓存');
@@ -312,7 +323,7 @@ class ScheduleRepository {
           resourceType: ResourceType.schedule,
           operation: SyncOperation.update,
           resourceId: schedule.id,
-          payload: schedule.toJson(),
+          payload: schedule.toJson(includeNulls: true),
           priority: 6, // 更新操作中等优先级
         );
 

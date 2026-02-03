@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import '../../models/chat/conversation.dart';
 import 'message_bubble.dart';
 import 'welcome_guide.dart';
@@ -49,8 +50,8 @@ class MessageListView extends StatefulWidget {
 class _MessageListViewState extends State<MessageListView> {
   // 滑动收起键盘相关（已禁用 - 影响正常使用）
   // double _lastScrollPosition = 0;
-  // DateTime? _lastScrollTime;
-
+  double _accumulatedDy = 0;
+  DateTime? _lastScrollAt;
   @override
   Widget build(BuildContext context) {
     // 无对话或加载中显示欢迎引导
@@ -77,56 +78,49 @@ class _MessageListViewState extends State<MessageListView> {
     // 显示消息列表
     return RefreshIndicator(
       onRefresh: widget.onRefresh ?? () async {},
-      child: ListView.builder(
-        // NotificationListener 已禁用 - 滚动收起键盘功能影响正常使用
-        // return NotificationListener<ScrollNotification>(
-        //   onNotification: _handleScrollNotification,
-        //   child: ListView.builder(
-        // NotificationListener 已禁用 - 滚动收起键盘功能影响正常使用
-        // return NotificationListener<ScrollNotification>(
-        //   onNotification: _handleScrollNotification,
-        //   child: ListView.builder(
-        controller: widget.scrollController,
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-        itemCount: widget.messages.length,
-        itemBuilder: (context, index) {
-          final message = widget.messages[index];
-          final isUser = message.role == 'user';
-          return MessageBubble(message: message, isUser: isUser);
-        },
-        // ),
+      child: NotificationListener<ScrollNotification>(
+        onNotification: _handleScrollNotification,
+        child: ListView.builder(
+          controller: widget.scrollController,
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          itemCount: widget.messages.length,
+          itemBuilder: (context, index) {
+            final message = widget.messages[index];
+            final isUser = message.role == 'user';
+            return MessageBubble(message: message, isUser: isUser);
+          },
+        ),
       ),
     );
   }
 
-  /// 处理滚动通知，实现快速下滑收起键盘（已禁用 - 影响正常使用）
-  // bool _handleScrollNotification(ScrollNotification notification) {
-  //   if (notification is ScrollUpdateNotification) {
-  //     final currentPosition = notification.metrics.pixels;
-  //     final currentTime = DateTime.now();
-  //
-  //     if (_lastScrollTime != null) {
-  //       // 计算滑动速度（像素/毫秒）
-  //       final deltaPosition = currentPosition - _lastScrollPosition;
-  //       final deltaTime = currentTime
-  //           .difference(_lastScrollTime!)
-  //           .inMilliseconds;
-  //
-  //       if (deltaTime > 0) {
-  //         final velocity = deltaPosition.abs() / deltaTime;
-  //
-  //         // 只在向下快速滑动时收起键盘（速度 > 2 px/ms，约等于 2000 px/s）
-  //         if (deltaPosition > 0 &&
-  //             velocity > 2 &&
-  //             FocusScope.of(context).hasFocus) {
-  //           FocusScope.of(context).unfocus();
-  //         }
-  //       }
-  //     }
-  //
-  //     _lastScrollPosition = currentPosition;
-  //     _lastScrollTime = currentTime;
-  //   }
-  //   return false;
-  // }
+  /// 滚动消息列表时，累计向下滑动距离达到阈值后收起键盘
+  bool _handleScrollNotification(ScrollNotification notification) {
+    if (notification is ScrollUpdateNotification) {
+      final delta = notification.scrollDelta ?? 0;
+      final now = DateTime.now();
+      double velocity = 0;
+      if (_lastScrollAt != null) {
+        final dtMs = now.difference(_lastScrollAt!).inMilliseconds;
+        if (dtMs > 0) {
+          velocity = delta.abs() / dtMs;
+        }
+      }
+      _lastScrollAt = now;
+      if (delta < 0) {
+        _accumulatedDy += delta.abs();
+        final hasFocus = FocusScope.of(context).hasFocus;
+        if (_accumulatedDy >= 300 && velocity >= 1.2 && hasFocus) {
+          FocusScope.of(context).unfocus();
+          _accumulatedDy = 0;
+        }
+      } else {
+        _accumulatedDy = 0;
+      }
+    } else if (notification is ScrollEndNotification) {
+      _accumulatedDy = 0;
+      _lastScrollAt = null;
+    }
+    return false;
+  }
 }

@@ -20,6 +20,7 @@ class TaskListView extends StatelessWidget {
     required this.onToggleTaskExpanded,
     required this.onStatusChanged,
     required this.onEdit,
+    required this.onUpdate,
     required this.onDelete,
     required this.onRefresh,
     required this.formatDateTime,
@@ -39,6 +40,7 @@ class TaskListView extends StatelessWidget {
   final void Function(String taskId) onToggleTaskExpanded;
   final void Function(Schedule task, String newStatus) onStatusChanged;
   final void Function(Schedule task) onEdit;
+  final Future<void> Function(Schedule updatedTask) onUpdate;
   final void Function(Schedule task) onDelete;
   final Future<void> Function() onRefresh;
   final String Function(DateTime dateTime) formatDateTime;
@@ -155,6 +157,7 @@ class TaskListView extends StatelessWidget {
               onTap: () => onToggleTaskExpanded(task.id),
               onStatusChanged: (newStatus) => onStatusChanged(task, newStatus),
               onEdit: () => onEdit(task),
+              onUpdate: onUpdate,
               onDelete: () => onDelete(task),
               use24HourFormat: use24HourFormat,
             ),

@@ -21,6 +21,7 @@ class CalendarScheduleList extends StatelessWidget {
     required this.onToggleScheduleExpanded,
     required this.onStatusChanged,
     required this.onEditSchedule,
+    required this.onUpdateSchedule,
     required this.onDeleteSchedule,
   });
 
@@ -37,6 +38,7 @@ class CalendarScheduleList extends StatelessWidget {
   final void Function(String scheduleId) onToggleScheduleExpanded;
   final void Function(Schedule schedule, String newStatus) onStatusChanged;
   final void Function(Schedule schedule) onEditSchedule;
+  final Future<void> Function(Schedule updatedSchedule) onUpdateSchedule;
   final void Function(Schedule schedule) onDeleteSchedule;
 
   @override
@@ -131,6 +133,7 @@ class CalendarScheduleList extends StatelessWidget {
                 onStatusChanged: (newStatus) =>
                     onStatusChanged(schedule, newStatus),
                 onEdit: () => onEditSchedule(schedule),
+                onUpdate: onUpdateSchedule,
                 onDelete: () => onDeleteSchedule(schedule),
                 use24HourFormat: use24HourFormat,
               ),

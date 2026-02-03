@@ -162,7 +162,7 @@ class Schedule {
     );
   }
 
-  Map<String, dynamic> toJson() {
+  Map<String, dynamic> toJson({bool includeNulls = false}) {
     // 格式化为 RFC3339 格式（带时区偏移量）
     String formatDateTime(DateTime dt) {
       // 使用本地时间并添加时区偏移量 +08:00
@@ -213,16 +213,27 @@ class Schedule {
       }
     }
 
-    return {
+    final data = <String, dynamic>{
       'id': id,
       'userId': userId,
       'title': title,
       'description': description,
       if (effectiveStartDate != null)
-        'startDate': formatDateOnly(effectiveStartDate),
-      if (hasStartTime) 'startTime': formatDateTime(startTime),
-      if (effectiveEndDate != null) 'endDate': formatDateOnly(effectiveEndDate),
-      if (hasEndTime && endTime != null) 'endTime': formatDateTime(endTime!),
+        'startDate': formatDateOnly(effectiveStartDate)
+      else if (includeNulls)
+        'startDate': null,
+      if (hasStartTime)
+        'startTime': formatDateTime(startTime)
+      else if (includeNulls)
+        'startTime': null,
+      if (effectiveEndDate != null)
+        'endDate': formatDateOnly(effectiveEndDate)
+      else if (includeNulls)
+        'endDate': null,
+      if (hasEndTime && endTime != null)
+        'endTime': formatDateTime(endTime!)
+      else if (includeNulls)
+        'endTime': null,
       'hasStartTime': hasStartTime,
       'hasEndTime': hasEndTime,
       'allDay': allDay,
@@ -242,6 +253,7 @@ class Schedule {
       'createdAt': createdAt != null ? formatDateTime(createdAt!) : null,
       'updatedAt': updatedAt != null ? formatDateTime(updatedAt!) : null,
     };
+    return data;
   }
 
   // 判断是否应该显示红点（未完成的日程）
@@ -339,6 +351,8 @@ class Schedule {
     bool? allDay,
     DateTime? startDate,
     DateTime? endDate,
+    bool? clearStartDate,
+    bool? clearEndDate,
     bool? hasStartTime,
     bool? hasEndTime,
     String? location,
@@ -362,8 +376,8 @@ class Schedule {
       startTime: startTime ?? this.startTime,
       endTime: endTime ?? this.endTime,
       allDay: allDay ?? this.allDay,
-      startDate: startDate ?? this.startDate,
-      endDate: endDate ?? this.endDate,
+      startDate: clearStartDate == true ? null : (startDate ?? this.startDate),
+      endDate: clearEndDate == true ? null : (endDate ?? this.endDate),
       hasStartTime: hasStartTime ?? this.hasStartTime,
       hasEndTime: hasEndTime ?? this.hasEndTime,
       location: location ?? this.location,

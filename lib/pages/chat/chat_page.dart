@@ -50,6 +50,7 @@ class _ChatPageState extends State<ChatPage> {
   bool _isLoading = false;
   bool _isSending = false;
   int _pendingCount = 0;
+  bool _showScrollToBottom = false;
 
   // 语音识别相关
   final VoiceInputService _voiceInput = VoiceInputService();
@@ -72,6 +73,19 @@ class _ChatPageState extends State<ChatPage> {
     _initVoiceInput();
     _listenToPendingCount();
     _searchController.addListener(_onSearchChanged);
+    _scrollController.addListener(_handleScroll);
+  }
+
+  void _handleScroll() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    final atBottom = position.maxScrollExtent - position.pixels <= 20.0;
+    final shouldShow = !atBottom;
+    if (shouldShow != _showScrollToBottom) {
+      setState(() {
+        _showScrollToBottom = shouldShow;
+      });
+    }
   }
 
   /// 监听待同步任务数量
@@ -1129,48 +1143,79 @@ class _ChatPageState extends State<ChatPage> {
         onEditConversationTitle: _editConversationTitle,
         onDeleteConversation: _handleDeleteConversation,
       ),
-      body: Column(
-        children: [
-          // 离线状态横幅
-          OfflineBanner(showPendingCount: true, pendingCount: _pendingCount),
-          // 主体内容
-          Expanded(
-            child: MessageListView(
-              currentConversation: _currentConversation,
-              messages: _messages,
-              isLoading: _isLoading,
-              showFullGuide: _conversations.isEmpty,
-              onExampleTap: (text) {
-                setState(() {
-                  _controller.text = text;
-                });
-              },
-              scrollController: _scrollController,
-              onRefresh: _refreshCurrentConversation,
-            ),
-          ),
-          if (_isSending)
-            const Padding(
-              padding: EdgeInsets.all(8.0),
-              child: LinearProgressIndicator(),
-            ),
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: Stack(
+          children: [
+            Column(
+              children: [
+                // 离线状态横幅
+                OfflineBanner(
+                  showPendingCount: true,
+                  pendingCount: _pendingCount,
+                ),
+                // 主体内容
+                Expanded(
+                  child: MessageListView(
+                    currentConversation: _currentConversation,
+                    messages: _messages,
+                    isLoading: _isLoading,
+                    showFullGuide: _conversations.isEmpty,
+                    onExampleTap: (text) {
+                      setState(() {
+                        _controller.text = text;
+                      });
+                    },
+                    scrollController: _scrollController,
+                    onRefresh: _refreshCurrentConversation,
+                  ),
+                ),
+                if (_isSending)
+                  const Padding(
+                    padding: EdgeInsets.all(8.0),
+                    child: LinearProgressIndicator(),
+                  ),
 
-          // 底部输入框
-          ChatInputBar(
-            controller: _controller,
-            isListening: _voiceInput.isListening,
-            isSending: _isSending,
-            onSend: _sendMessage,
-            onToggleListening: _toggleListening,
-            onStartListening: _startListening,
-            onStopListening: _stopListening,
-            images: _images,
-            onPickImage: _pickImage,
-            onTakePhoto: _takePhoto,
-            onRemoveImage: _removeImage,
-            onPasteImage: _handlePastedImage,
-          ),
-        ],
+                // 底部输入框
+                ChatInputBar(
+                  controller: _controller,
+                  isListening: _voiceInput.isListening,
+                  isSending: _isSending,
+                  onSend: _sendMessage,
+                  onToggleListening: _toggleListening,
+                  onStartListening: _startListening,
+                  onStopListening: _stopListening,
+                  images: _images,
+                  onPickImage: _pickImage,
+                  onTakePhoto: _takePhoto,
+                  onRemoveImage: _removeImage,
+                  onPasteImage: _handlePastedImage,
+                ),
+              ],
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 96,
+              child: AnimatedOpacity(
+                opacity: _showScrollToBottom ? 1 : 0,
+                duration: const Duration(milliseconds: 200),
+                child: IgnorePointer(
+                  ignoring: !_showScrollToBottom,
+                  child: Align(
+                    alignment: Alignment.center,
+                    child: FloatingActionButton(
+                      mini: true,
+                      onPressed: _scrollToBottom,
+                      child: const Icon(Icons.arrow_downward),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

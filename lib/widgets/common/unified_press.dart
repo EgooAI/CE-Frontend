@@ -10,15 +10,15 @@ class UnifiedPress extends StatelessWidget {
   });
 
   final Widget child;
-  final VoidCallback onActivate;
+  final ValueChanged<Offset> onActivate;
   final HitTestBehavior behavior;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: behavior,
-      onLongPress: onActivate,
-      onSecondaryTap: onActivate,
+      onLongPressStart: (details) => onActivate(details.globalPosition),
+      onSecondaryTapDown: (details) => onActivate(details.globalPosition),
       child: child,
     );
   }
