@@ -1,73 +1,86 @@
-name: Release - Build & Deploy
+name: Release - Build & Upload to OSS
 
-# 用途：仅在版本号更新时构建完整安装包
-# 触发方式：推送 Git Tag (格式: v1.2.3)
+# 触发方式：手动触发（Actions → Run workflow）
 on:
-  push:
-    tags:
-      - "v*.*.*"
-  workflow_dispatch: # 允许手动触发（用于紧急发布）
+  workflow_dispatch:
 
 env:
   JAVA_VERSION: "17"
   FLUTTER_CHANNEL: "stable"
 
+# 所需 GitHub Secrets：
+#   构建参数：  API_URL / XFYUN_APP_ID / XFYUN_ACCESS_KEY_ID / XFYUN_ACCESS_KEY_SECRET
+#   阿里云 OSS：OSS_ENDPOINT / OSS_BUCKET / OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET
+#   通知：      WECHAT_WORK_WEBHOOK
+
 jobs:
   # ====================================================
-  # 验证版本号
+  # 准备：提取版本号 + 生成 Changelog JSON
   # ====================================================
-  validate-version:
-    name: Validate Version
+  prepare:
+    name: Prepare
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       version: ${{ steps.extract.outputs.version }}
-      build_number: ${{ steps.extract.outputs.build_number }}
-      tag_version: ${{ steps.extract.outputs.tag_version }}
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Extract Version Info
+      - name: Extract Version
         id: extract
         run: |
-          # 从 pubspec.yaml 提取版本号
-          PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | cut -d ' ' -f 2)
-          VERSION=$(echo $PUBSPEC_VERSION | cut -d '+' -f 1)
-          BUILD_NUMBER=$(echo $PUBSPEC_VERSION | cut -d '+' -f 2)
-
-          # 从 Git Tag 提取版本号（去掉 'v' 前缀）
-          TAG_VERSION=${GITHUB_REF#refs/tags/v}
-
+          # 从 pubspec.yaml 读取版本，截去 +buildNumber 部分
+          PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | awk '{print $2}')
+          VERSION=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f1)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "build_number=$BUILD_NUMBER" >> $GITHUB_OUTPUT
-          echo "tag_version=$TAG_VERSION" >> $GITHUB_OUTPUT
+          echo "📦 版本号: $VERSION"
 
-          echo "📦 pubspec.yaml 版本: $VERSION+$BUILD_NUMBER"
-          echo "🏷️  Git Tag 版本: $TAG_VERSION"
-
-      - name: Check Version Match
-        if: github.event_name != 'workflow_dispatch' && startsWith(github.ref, 'refs/tags/')
+      - name: Generate Changelog JSON
         run: |
-          if [ "${{ steps.extract.outputs.version }}" != "${{ steps.extract.outputs.tag_version }}" ]; then
-            echo "❌ 错误：版本号不匹配！"
-            echo "   pubspec.yaml: ${{ steps.extract.outputs.version }}"
-            echo "   Git Tag: ${{ steps.extract.outputs.tag_version }}"
-            echo ""
-            echo "💡 解决方案："
-            echo "   1. 修改 pubspec.yaml 中的 version 为 ${{ steps.extract.outputs.tag_version }}+<build_number>"
-            echo "   2. 或删除错误的 Tag：git tag -d v${{ steps.extract.outputs.tag_version }} && git push origin :refs/tags/v${{ steps.extract.outputs.tag_version }}"
-            exit 1
+          VERSION=${{ steps.extract.outputs.version }}
+          TODAY=$(date +%Y-%m-%d)
+
+          # 取最近一个 tag 到 HEAD 之间的 commit 信息
+          PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+
+          if [ -z "$PREVIOUS_TAG" ]; then
+            CONTENT="首次发布"
+          else
+            CONTENT=$(git log "${PREVIOUS_TAG}..HEAD" --pretty=format:"• %s" --no-merges | head -20)
+            [ -z "$CONTENT" ] && CONTENT="常规更新"
           fi
-          echo "✅ 版本号验证通过"
+
+          # 将内容转义为合法 JSON 字符串
+          CONTENT_JSON=$(echo "$CONTENT" | python3 -c "import sys,json; print(json.dumps(sys.stdin.read().strip()))")
+
+          cat > changelog.json <<EOF
+          {
+            "version": "$VERSION",
+            "releaseDate": "$TODAY",
+            "content": $CONTENT_JSON
+          }
+          EOF
+
+          echo "📝 Changelog 内容:"
+          cat changelog.json
+
+      - name: Upload Changelog Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: changelog
+          path: changelog.json
+          retention-days: 1
 
   # ====================================================
-  # Standard Android (普通构建)
+  # Android：构建 APK
   # ====================================================
-  build-android-standard:
-    name: Build Android (Standard)
-    needs: validate-version
+  build-android:
+    name: Build Android APK
+    needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -94,20 +107,19 @@ jobs:
       - name: Configure Gradle
         run: |
           mkdir -p ~/.gradle
-          echo "org.gradle.daemon=true" >> ~/.gradle/gradle.properties
-          echo "org.gradle.parallel=true" >> ~/.gradle/gradle.properties
-          echo "org.gradle.caching=true" >> ~/.gradle/gradle.properties
-          echo "org.gradle.configureondemand=true" >> ~/.gradle/gradle.properties
-          echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+UseParallelGC" >> ~/.gradle/gradle.properties
-          echo "android.enableR8.fullMode=false" >> ~/.gradle/gradle.properties
+          cat >> ~/.gradle/gradle.properties <<'EOF'
+          org.gradle.daemon=true
+          org.gradle.parallel=true
+          org.gradle.caching=true
+          org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+UseParallelGC
+          android.enableR8.fullMode=false
+          EOF
 
-      # 在运行构建之前，手动安装 Rust Android 目标
-      # 这能绕过 Cargokit 在构建过程中下载失败的问题
+      # 绕过 Cargokit 在 CI 构建时下载 Rust 目标失败的问题
       - name: Pre-install Rust Targets
-        run: |
-          rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
-          
-      - name: Build Standard APK
+        run: rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+
+      - name: Build APK
         run: |
           flutter build apk --release \
             --target-platform android-arm64 \
@@ -119,98 +131,22 @@ jobs:
 
       - name: Rename APK
         run: |
-          mv build/app/outputs/flutter-apk/app-release.apk \
-             chrono-android-v${{ needs.validate-version.outputs.version }}.apk
+          VERSION=${{ needs.prepare.outputs.version }}
+          cp build/app/outputs/flutter-apk/app-release.apk ${VERSION}.apk
 
-      - name: Upload Artifact
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: android-standard
-          path: chrono-android-v${{ needs.validate-version.outputs.version }}.apk
-          retention-days: 7
+          name: android-apk
+          path: ${{ needs.prepare.outputs.version }}.apk
+          retention-days: 1
 
   # ====================================================
-  # Shorebird Android (支持热更新)
+  # iOS：构建无签名 IPA
   # ====================================================
-  build-android-shorebird:
-    name: Build Android (Shorebird)
-    needs: validate-version
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: "zulu"
-          java-version: ${{ env.JAVA_VERSION }}
-          cache: "gradle"
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: ${{ env.FLUTTER_CHANNEL }}
-          cache: true
-
-      - name: Setup Shorebird
-        uses: shorebirdtech/setup-shorebird@v1
-        with:
-          cache: true
-
-      - name: Get Dependencies
-        run: flutter pub get
-
-      - name: Configure Gradle
-        run: |
-          mkdir -p ~/.gradle
-          echo "org.gradle.daemon=true" >> ~/.gradle/gradle.properties
-          echo "org.gradle.parallel=true" >> ~/.gradle/gradle.properties
-          echo "org.gradle.caching=true" >> ~/.gradle/gradle.properties
-          echo "org.gradle.configureondemand=true" >> ~/.gradle/gradle.properties
-          echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+UseParallelGC" >> ~/.gradle/gradle.properties
-          echo "android.enableR8.fullMode=false" >> ~/.gradle/gradle.properties
-
-      # 在运行构建之前，手动安装 Rust Android 目标
-      # 这能绕过 Cargokit 在构建过程中下载失败的问题
-      - name: Pre-install Rust Targets
-        run: |
-          rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
-          
-      - name: Shorebird Release
-        env:
-          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
-        run: |
-          shorebird release android \
-            --artifact apk \
-            --target-platform android-arm64 \
-            -- \
-            --dart-define=API_URL=${{ secrets.API_URL }} \
-            --dart-define=XFYUN_APP_ID=${{ secrets.XFYUN_APP_ID }} \
-            --dart-define=XFYUN_ACCESS_KEY_ID=${{ secrets.XFYUN_ACCESS_KEY_ID }} \
-            --dart-define=XFYUN_ACCESS_KEY_SECRET=${{ secrets.XFYUN_ACCESS_KEY_SECRET }} \
-            --no-tree-shake-icons
-
-      - name: Rename APK
-        run: |
-          mv build/app/outputs/flutter-apk/app-release.apk \
-             chrono-android-shorebird-v${{ needs.validate-version.outputs.version }}.apk
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-shorebird
-          path: chrono-android-shorebird-v${{ needs.validate-version.outputs.version }}.apk
-          retention-days: 7
-
-  # ====================================================
-  # Standard iOS (普通构建)
-  # ====================================================
-  build-ios-standard:
-    name: Build iOS (Standard)
-    needs: validate-version
+  build-ios:
+    name: Build iOS IPA
+    needs: prepare
     runs-on: macos-latest
     timeout-minutes: 60
 
@@ -237,17 +173,16 @@ jobs:
         with:
           path: ios/Pods
           key: ${{ runner.os }}-pods-${{ hashFiles('ios/Podfile.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-pods-
+          restore-keys: ${{ runner.os }}-pods-
 
       - name: Install Pods
-        run: |
-          cd ios
-          pod install
+        run: cd ios && pod install
 
-      - name: Build iOS (No Codesign)
+      - name: Build iOS
         run: |
-          flutter build ios --release --no-codesign \
+          flutter build ios --release \
+            --no-codesign \
+            --no-tree-shake-icons \
             --dart-define=API_URL=${{ secrets.API_URL }} \
             --dart-define=XFYUN_APP_ID=${{ secrets.XFYUN_APP_ID }} \
             --dart-define=XFYUN_ACCESS_KEY_ID=${{ secrets.XFYUN_ACCESS_KEY_ID }} \
@@ -255,205 +190,126 @@ jobs:
 
       - name: Package IPA
         run: |
+          VERSION=${{ needs.prepare.outputs.version }}
           mkdir Payload
-          mv build/ios/iphoneos/Runner.app Payload
-          zip -r chrono-ios-v${{ needs.validate-version.outputs.version }}.ipa Payload
+          cp -r build/ios/iphoneos/Runner.app Payload/
+          zip -r ${VERSION}.ipa Payload
 
-      - name: Upload Artifact
+      - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ios-standard
-          path: chrono-ios-v${{ needs.validate-version.outputs.version }}.ipa
-          retention-days: 7
+          name: ios-ipa
+          path: ${{ needs.prepare.outputs.version }}.ipa
+          retention-days: 1
 
   # ====================================================
-  # Shorebird iOS (支持热更新)
+  # 上传至阿里云 OSS
   # ====================================================
-  build-ios-shorebird:
-    name: Build iOS (Shorebird)
-    needs: validate-version
-    runs-on: macos-latest
-    timeout-minutes: 60
-
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: ${{ env.FLUTTER_CHANNEL }}
-          cache: true
-
-      - name: Setup Shorebird
-        uses: shorebirdtech/setup-shorebird@v1
-        with:
-          cache: true
-
-      - name: Setup Xcode
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: latest-stable
-
-      - name: Get Dependencies
-        run: flutter pub get
-
-      - name: Cache CocoaPods
-        uses: actions/cache@v4
-        with:
-          path: ios/Pods
-          key: ${{ runner.os }}-pods-${{ hashFiles('ios/Podfile.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-pods-
-
-      - name: Install Pods
-        run: |
-          cd ios
-          pod install
-
-      - name: Shorebird Release iOS
-        env:
-          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
-        run: |
-          shorebird release ios \
-            --no-codesign \
-            -- \
-            --dart-define=API_URL=${{ secrets.API_URL }} \
-            --dart-define=XFYUN_APP_ID=${{ secrets.XFYUN_APP_ID }} \
-            --dart-define=XFYUN_ACCESS_KEY_ID=${{ secrets.XFYUN_ACCESS_KEY_ID }} \
-            --dart-define=XFYUN_ACCESS_KEY_SECRET=${{ secrets.XFYUN_ACCESS_KEY_SECRET }} \
-            --no-tree-shake-icons
-
-      - name: Package IPA
-        run: |
-          mkdir Payload
-          mv build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app Payload
-          zip -r chrono-ios-shorebird-v${{ needs.validate-version.outputs.version }}.ipa Payload
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-shorebird
-          path: chrono-ios-shorebird-v${{ needs.validate-version.outputs.version }}.ipa
-          retention-days: 7
-
-  # ====================================================
-  # 创建 GitHub Release
-  # ====================================================
-  create-release:
-    name: Create GitHub Release
+  upload-oss:
+    name: Upload to Aliyun OSS
     needs:
-      - validate-version
-      - build-android-standard
-      - build-android-shorebird
-      - build-ios-standard
-      - build-ios-shorebird
+      - prepare
+      - build-android
+      - build-ios
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions:
-      contents: write
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # 获取完整历史，包括所有 tags
-
-      - name: Download All Artifacts
+      - name: Download APK
         uses: actions/download-artifact@v4
         with:
+          name: android-apk
+          path: ./artifacts/android
+
+      - name: Download IPA
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-ipa
+          path: ./artifacts/ios
+
+      - name: Download Changelog
+        uses: actions/download-artifact@v4
+        with:
+          name: changelog
           path: ./artifacts
 
-      - name: Generate Changelog
-        id: changelog
+      - name: Install ossutil
         run: |
-          # 获取上一个 tag
-          PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed -n '2p')
+          curl -sL https://gosspublic.alicdn.com/ossutil/1.7.19/ossutil64 -o /usr/local/bin/ossutil
+          chmod +x /usr/local/bin/ossutil
 
-          if [ -z "$PREVIOUS_TAG" ]; then
-            echo "这是第一个正式版本发布"
-            CHANGELOG="首次发布"
-          else
-            echo "生成从 $PREVIOUS_TAG 到 ${{ github.ref_name }} 的更新日志"
-            CHANGELOG=$(git log $PREVIOUS_TAG..${{ github.ref_name }} --pretty=format:"- %s (%an)" --no-merges)
-          fi
+      - name: Upload to OSS
+        env:
+          OSS_ENDPOINT: ${{ secrets.OSS_ENDPOINT }}
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
+        run: |
+          VERSION=${{ needs.prepare.outputs.version }}
 
-          # 写入文件供后续步骤使用
-          echo "$CHANGELOG" > changelog.txt
+          ossutil config -e "$OSS_ENDPOINT" -i "$OSS_ACCESS_KEY_ID" -k "$OSS_ACCESS_KEY_SECRET"
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: Chrono v${{ needs.validate-version.outputs.version }}
-          body: |
-            ## 📦 版本信息
+          echo "📦 上传 Android APK..."
+          ossutil cp "artifacts/android/${VERSION}.apk" \
+            "oss://${OSS_BUCKET}/app-releases/android/${VERSION}.apk" -f
 
-            **版本号：** ${{ needs.validate-version.outputs.version }}
-            **构建号：** ${{ needs.validate-version.outputs.build_number }}
-            **发布时间：** ${{ github.event.head_commit.timestamp }}
+          echo "📦 上传 iOS IPA..."
+          ossutil cp "artifacts/ios/${VERSION}.ipa" \
+            "oss://${OSS_BUCKET}/app-releases/ios/${VERSION}.ipa" -f
 
-            ## 📱 安装包下载
+          echo "📝 上传 Changelog..."
+          ossutil cp artifacts/changelog.json \
+            "oss://${OSS_BUCKET}/app-releases/android/changelogs/${VERSION}.json" -f
+          ossutil cp artifacts/changelog.json \
+            "oss://${OSS_BUCKET}/app-releases/ios/changelogs/${VERSION}.json" -f
 
-            ### Android
-            - **chrono-android-v${{ needs.validate-version.outputs.version }}.apk** - 普通版（适合应用商店）
-            - **chrono-android-shorebird-v${{ needs.validate-version.outputs.version }}.apk** - 热更新版（支持在线修复）
-
-            ### iOS
-            - **chrono-ios-v${{ needs.validate-version.outputs.version }}.ipa** - 普通版（需自签）
-            - **chrono-ios-shorebird-v${{ needs.validate-version.outputs.version }}.ipa** - 热更新版（需自签）
-
-            ## 🔄 更新日志
-
-            $(cat changelog.txt)
-
-            ## 🚀 安装说明
-
-            **Android：**
-            1. 下载对应的 APK 文件
-            2. 开启"允许安装未知应用"权限
-            3. 点击安装
-
-            **iOS：**
-            1. 下载 IPA 文件
-            2. 使用 AltStore/Sideloadly 自签安装
-            3. 在设置中信任开发者证书
-
-            ## 🔧 Shorebird 热更新说明
-
-            如果你安装的是 **Shorebird 版本**，小更新无需重新安装：
-            - 应用会在后台自动检查更新
-            - 下次启动时自动应用补丁
-            - 查看当前版本：设置 → 关于
-
-            ---
-
-            **注意：** 如果从旧版本升级，建议先卸载后重装。
-
-          files: |
-            ./artifacts/android-standard/*.apk
-            ./artifacts/android-shorebird/*.apk
-            ./artifacts/ios-standard/*.ipa
-            ./artifacts/ios-shorebird/*.ipa
-          draft: false
-          prerelease: false
+          echo "✅ 全部上传完成"
+          echo "   oss://${OSS_BUCKET}/app-releases/android/${VERSION}.apk"
+          echo "   oss://${OSS_BUCKET}/app-releases/ios/${VERSION}.ipa"
+          echo "   oss://${OSS_BUCKET}/app-releases/android/changelogs/${VERSION}.json"
+          echo "   oss://${OSS_BUCKET}/app-releases/ios/changelogs/${VERSION}.json"
 
   # ====================================================
-  # 发布后通知
+  # 企业微信通知
   # ====================================================
-  post-release:
-    name: Post-Release Tasks
+  notify:
+    name: Notify WeChat Work
     needs:
-      - validate-version
-      - create-release
+      - prepare
+      - upload-oss
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    if: always()
 
     steps:
-      - name: Success Notice
+      - name: Notify Success
+        if: needs.upload-oss.result == 'success'
+        env:
+          WEBHOOK: ${{ secrets.WECHAT_WORK_WEBHOOK }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          echo "🎉 版本 v${{ needs.validate-version.outputs.version }} 发布成功！"
-          echo ""
-          echo "📦 下载地址："
-          echo "   https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
-          echo ""
+          curl -s -X POST "$WEBHOOK" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"msgtype\": \"markdown\",
+              \"markdown\": {
+                \"content\": \"## ✅ CE-Frontend **v${VERSION}** 发布成功\\n> 触发人：**${{ github.actor }}**\\n> 时间：$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')\\n\\n**OSS 产物路径：**\\n\`app-releases/android/${VERSION}.apk\`\\n\`app-releases/ios/${VERSION}.ipa\`\\n\`app-releases/android/changelogs/${VERSION}.json\`\\n\\n[查看构建日志](${RUN_URL})\"
+              }
+            }"
+
+      - name: Notify Failure
+        if: needs.upload-oss.result != 'success'
+        env:
+          WEBHOOK: ${{ secrets.WECHAT_WORK_WEBHOOK }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          curl -s -X POST "$WEBHOOK" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"msgtype\": \"markdown\",
+              \"markdown\": {
+                \"content\": \"## ❌ CE-Frontend **v${VERSION}** 发布失败\\n> 触发人：**${{ github.actor }}**\\n> 时间：$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')\\n\\n[查看构建日志](${RUN_URL})\"
+              }
+            }"
