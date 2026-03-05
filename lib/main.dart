@@ -1,19 +1,21 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workmanager/workmanager.dart';
-import 'package:shorebird_code_push/shorebird_code_push.dart';
 import 'pages/auth/login_page.dart';
 import 'pages/main_page.dart';
 import 'pages/profile/user/edit_email_page.dart';
 import 'pages/profile/user/edit_username_page.dart';
 import 'pages/profile/user/edit_password_page.dart';
+import 'pages/profile/update/check_update_page.dart';
 import 'pages/reminders/reminders_page.dart'; // ignore: unused_import
 import 'pages/profile/recurrence/recurring_schedules_page.dart';
 import 'pages/profile/cache/cache_management_page.dart';
 import 'pages/profile/daily/daily_records_page.dart';
+import 'services/app_release/app_release_service.dart';
 import 'services/core/auth_service.dart';
 import 'services/core/api_client.dart';
 import 'services/sync/sync_scheduler.dart';
@@ -73,90 +75,176 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
+  static const String _updateDialogSuppressKeyPrefix =
+      'update_dialog_suppress_until_';
+
   bool _isLoading = true;
   bool _isLoggedIn = false;
   User? _user;
-  Timer? _updateCheckTimer;
+  bool _startupVersionCheckScheduled = false;
 
   @override
   void initState() {
     super.initState();
     _initializeApp();
-    _startUpdateMonitoring();
+    _scheduleStartupVersionCheck();
   }
 
-  @override
-  void dispose() {
-    _updateCheckTimer?.cancel();
-    super.dispose();
-  }
+  void _scheduleStartupVersionCheck() {
+    if (_startupVersionCheckScheduled) return;
+    _startupVersionCheckScheduled = true;
 
-  void _startUpdateMonitoring() {
-    if (kIsWeb || kDebugMode) return;
-
-    // 首次立即检查
-    _checkForUpdates();
-
-    // 每隔 5 分钟检查一次状态
-    _updateCheckTimer = Timer.periodic(const Duration(minutes: 5), (timer) {
-      _checkForUpdates();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkVersionOnStartup();
     });
   }
 
-  Future<void> _checkForUpdates() async {
-    // 仅在非 Web 平台检查 Shorebird 更新
-    if (kIsWeb || kDebugMode) return;
-
+  Future<void> _checkVersionOnStartup() async {
+    print('[UpdateCheck] startup check begin');
     try {
-      final updater = ShorebirdUpdater();
+      final versionInfo = await AppReleaseService().getLatestVersion();
+      print(
+        '[UpdateCheck] latest version fetched: ${versionInfo.latestVersion}',
+      );
 
-      // 检查是否已下载完成（Shorebird 后台自动下载）
-      final status = await updater.checkForUpdate();
+      String currentVersion = '0.0.0';
+      try {
+        final packageInfo = await PackageInfo.fromPlatform();
+        currentVersion = packageInfo.version.split('+').first;
+      } catch (e) {
+        print('[UpdateCheck] current version read failed: $e');
+      }
+      final latestVersion = versionInfo.latestVersion;
+      final hasNewVersion = _hasNewVersion(currentVersion, latestVersion);
+      print(
+        '[UpdateCheck] current=$currentVersion latest=$latestVersion hasNew=$hasNewVersion debug=$kDebugMode',
+      );
 
-      if (status == UpdateStatus.restartRequired) {
-        print('[Shorebird] 检测到已下载的更新，提示重启');
+      if (!hasNewVersion && !kDebugMode) {
+        print('[UpdateCheck] skip dialog: already latest in non-debug');
+        return;
+      }
 
-        // 停止轮询
-        _updateCheckTimer?.cancel();
-
-        if (mounted && navigatorKey.currentContext != null) {
-          _showUpdateDialog();
+      if (hasNewVersion) {
+        final suppressed = await _isUpdateDialogSuppressed(latestVersion);
+        if (suppressed) {
+          print('[UpdateCheck] skip dialog: suppressed until window expires');
+          return;
         }
       }
+
+      final dialogLatestVersion = hasNewVersion
+          ? latestVersion
+          : '$latestVersion（预览）';
+      _showNewVersionDialogWhenReady(
+        currentVersion,
+        dialogLatestVersion,
+        suppressVersion: hasNewVersion ? latestVersion : null,
+      );
     } catch (e) {
-      print('[Shorebird] 检查更新失败: $e');
+      print('[UpdateCheck] latest version request failed: $e');
+      // 启动检查失败不影响主流程，debug 下兜底弹预览弹窗
+      if (kDebugMode) {
+        _showNewVersionDialogWhenReady('未知', '预览');
+      }
     }
   }
 
-  void _showUpdateDialog() {
+  void _showNewVersionDialogWhenReady(
+    String currentVersion,
+    String latestVersion, {
+    String? suppressVersion,
+    int attempts = 0,
+  }) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final context = navigatorKey.currentContext;
+      if (context != null) {
+        _showNewVersionDialog(
+          context,
+          currentVersion,
+          latestVersion,
+          suppressVersion: suppressVersion,
+        );
+        return;
+      }
+      if (attempts >= 8) return;
+      _showNewVersionDialogWhenReady(
+        currentVersion,
+        latestVersion,
+        suppressVersion: suppressVersion,
+        attempts: attempts + 1,
+      );
+    });
+  }
+
+  Future<bool> _isUpdateDialogSuppressed(String latestVersion) async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = '$_updateDialogSuppressKeyPrefix$latestVersion';
+    final suppressUntilMs = prefs.getInt(key);
+    if (suppressUntilMs == null) return false;
+    return DateTime.now().millisecondsSinceEpoch < suppressUntilMs;
+  }
+
+  Future<void> _suppressUpdateDialogForThreeDays(String latestVersion) async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = '$_updateDialogSuppressKeyPrefix$latestVersion';
+    final suppressUntil = DateTime.now().add(const Duration(days: 3));
+    await prefs.setInt(key, suppressUntil.millisecondsSinceEpoch);
+  }
+
+  bool _hasNewVersion(String current, String latest) {
+    final c = _parseVersion(current);
+    final l = _parseVersion(latest);
+    for (int i = 0; i < 3; i++) {
+      if (l[i] > c[i]) return true;
+      if (l[i] < c[i]) return false;
+    }
+    return false;
+  }
+
+  List<int> _parseVersion(String value) {
+    final parts = value.split('.');
+    return List.generate(
+      3,
+      (i) => i < parts.length ? (int.tryParse(parts[i]) ?? 0) : 0,
+    );
+  }
+
+  void _showNewVersionDialog(
+    BuildContext context,
+    String currentVersion,
+    String latestVersion, {
+    String? suppressVersion,
+  }) {
     showDialog(
-      context: navigatorKey.currentContext!,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Row(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) => AlertDialog(
+        title: Row(
           children: [
-            Icon(Icons.system_update, color: Colors.blue),
-            SizedBox(width: 8),
-            Text('已获取更新'),
+            const Icon(Icons.system_update, color: Color(0xFF5B8CFF)),
+            const SizedBox(width: 8),
+            Flexible(child: Text('发现新版本 v$latestVersion')),
           ],
         ),
-        content: const Text(
-          '应用已下载最新版本，请重启应用以应用更新。',
-          style: TextStyle(fontSize: 16),
-        ),
+        content: Text('当前版本 v$currentVersion，发现新版本，可前往查看更新内容和下载。'),
         actions: [
           TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
+            onPressed: () async {
+              if (suppressVersion != null) {
+                await _suppressUpdateDialogForThreeDays(suppressVersion);
+              }
+              if (!dialogContext.mounted) return;
+              Navigator.of(dialogContext).pop();
             },
-            child: const Text('稍后重启'),
+            child: const Text('稍后再说'),
           ),
           ElevatedButton(
             onPressed: () {
-              // 关闭应用（用户手动重启）
-              SystemNavigator.pop();
+              Navigator.of(dialogContext).pop();
+              navigatorKey.currentState?.pushNamed('/check-update');
             },
-            child: const Text('立即重启'),
+            child: const Text('查看详情'),
           ),
         ],
       ),
@@ -212,6 +300,7 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return MaterialApp(
+        navigatorKey: navigatorKey,
         themeAnimationDuration: Duration.zero,
         localizationsDelegates: const [
           GlobalMaterialLocalizations.delegate,
@@ -386,6 +475,7 @@ class _MyAppState extends State<MyApp> {
         '/recurring-schedules': (context) => const RecurringSchedulesPage(),
         '/cache-management': (context) => const CacheManagementPage(),
         '/daily-records': (context) => const DailyRecordsPage(),
+        '/check-update': (context) => const CheckUpdatePage(),
       },
       onGenerateRoute: (settings) {
         if (settings.name == '/edit-email') {

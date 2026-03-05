@@ -3,8 +3,6 @@ import '../../models/auth/user.dart';
 import '../../services/core/auth_service.dart';
 import '../../widgets/common/app_snack_bar.dart';
 import '../auth/login_page.dart';
-import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
-import 'package:shorebird_code_push/shorebird_code_push.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -18,91 +16,20 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   late User user;
-  String? _patchVersion;
   String? _appVersion;
-  bool _isUpdatingPatch = false;
-  String _patchUpdateMessage = '检查并下载补丁';
-  final _shorebirdUpdater = ShorebirdUpdater();
 
   @override
   void initState() {
     super.initState();
     user = widget.initialUser;
-    _loadPatchVersion();
     _loadAppVersion();
-  }
-
-  Future<void> _loadPatchVersion() async {
-    if (kIsWeb || kDebugMode) {
-      setState(() {
-        _appVersion = '本地调试版本';
-        _patchVersion = '未启用';
-      });
-      return;
-    }
-
-    try {
-      final patch = await _shorebirdUpdater.readCurrentPatch();
-      setState(() {
-        _patchVersion = patch?.number.toString() ?? '无';
-      });
-    } catch (e) {
-      setState(() {
-        _patchVersion = '未启用';
-      });
-    }
-  }
-
-  Future<void> _checkAndUpdatePatch() async {
-    if (kIsWeb || kDebugMode || !_shorebirdUpdater.isAvailable) {
-      showAppSnackBar(context, const SnackBar(content: Text('当前环境不支持补丁更新')));
-      return;
-    }
-
-    if (_isUpdatingPatch) return;
-    setState(() {
-      _isUpdatingPatch = true;
-      _patchUpdateMessage = '正在检查更新...';
-    });
-
-    try {
-      final status = await _shorebirdUpdater.checkForUpdate();
-      if (status == UpdateStatus.upToDate) {
-        setState(() {
-          _patchUpdateMessage = '已是最新版本';
-        });
-        return;
-      }
-
-      setState(() {
-        _patchUpdateMessage = '正在下载更新...';
-      });
-
-      await _shorebirdUpdater.update();
-
-      final nextPatch = await _shorebirdUpdater.readNextPatch();
-      setState(() {
-        _patchVersion = nextPatch?.number.toString() ?? _patchVersion;
-        _patchUpdateMessage = '更新已下载，重启应用生效';
-      });
-    } catch (e) {
-      setState(() {
-        _patchUpdateMessage = '更新失败：$e';
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isUpdatingPatch = false;
-        });
-      }
-    }
   }
 
   Future<void> _loadAppVersion() async {
     try {
       final packageInfo = await PackageInfo.fromPlatform();
       setState(() {
-        _appVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
+        _appVersion = packageInfo.version;
       });
     } catch (e) {
       setState(() {
@@ -328,96 +255,42 @@ class _ProfilePageState extends State<ProfilePage> {
                       Navigator.pushNamed(context, '/cache-management'),
                 ),
               ]),
-              if (!kIsWeb)
-                Column(
-                  children: [
-                    const SizedBox(height: 12),
-                    _buildSectionCard([
-                      ListTile(
-                        leading: _buildIconAvatar(
-                          Icons.system_update,
-                          const Color(0xFF5B8CFF),
-                        ),
-                        title: const Text('手动获取更新'),
-                        subtitle: Text(
-                          _patchUpdateMessage,
-                          style: const TextStyle(color: Color(0xFF8A8F98)),
-                        ),
-                        trailing: _isUpdatingPatch
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : TextButton(
-                                onPressed: _checkAndUpdatePatch,
-                                child: const Text('检查更新'),
-                              ),
-                      ),
-                      if (_isUpdatingPatch)
-                        const Padding(
-                          padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
-                          child: LinearProgressIndicator(minHeight: 3),
-                        ),
-                    ]),
-                  ],
-                ),
-              const SizedBox(height: 16),
               Column(
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.info_outline,
-                        size: 18,
-                        color: Color(0xFF8A8F98),
-                      ),
-                      const SizedBox(width: 6),
-                      const Text(
-                        '应用版本: ',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Color(0xFF8A8F98),
-                        ),
-                      ),
-                      Text(
-                        _appVersion ?? '加载中...',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Color(0xFF1F2329),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
+                  const SizedBox(height: 12),
+                  _buildSectionCard([
+                    _buildActionTile(
+                      icon: Icons.system_update,
+                      iconColor: const Color(0xFF5B8CFF),
+                      title: '检查更新',
+                      subtitle: '当前版本 ${_appVersion ?? '加载中...'}',
+                      onTap: () =>
+                          Navigator.pushNamed(context, '/check-update'),
+                    ),
+                  ]),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.info_outline,
+                    size: 18,
+                    color: Color(0xFF8A8F98),
                   ),
-                  const SizedBox(height: 4),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.bolt,
-                        size: 18,
-                        color: Color(0xFF8A8F98),
-                      ),
-                      const SizedBox(width: 6),
-                      const Text(
-                        'Patch 版本: ',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Color(0xFF8A8F98),
-                        ),
-                      ),
-                      Text(
-                        _patchVersion ?? '加载中...',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Color(0xFF1F2329),
-                        ),
-                      ),
-                    ],
+                  const SizedBox(width: 6),
+                  const Text(
+                    '应用版本: ',
+                    style: TextStyle(fontSize: 13, color: Color(0xFF8A8F98)),
+                  ),
+                  Text(
+                    _appVersion ?? '加载中...',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF1F2329),
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ],
               ),
