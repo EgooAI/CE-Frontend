@@ -11,6 +11,7 @@ class ChatInputBar extends StatefulWidget {
   final bool isListening;
   final bool isSending;
   final VoidCallback onSend;
+  final VoidCallback? onInterrupt;
   final VoidCallback? onToggleListening;
   final VoidCallback? onStartListening;
   final VoidCallback? onStopListening;
@@ -27,6 +28,7 @@ class ChatInputBar extends StatefulWidget {
     required this.isListening,
     required this.isSending,
     required this.onSend,
+    this.onInterrupt,
     this.onToggleListening,
     this.onStartListening,
     this.onStopListening,
@@ -277,76 +279,91 @@ class _ChatInputBarState extends State<ChatInputBar> {
                     ),
                   ),
                 ),
-                // 发送按钮（使用 Visibility）
-                Visibility(
-                  visible: hasContent,
-                  maintainSize: false,
-                  maintainAnimation: false,
-                  maintainState: false,
-                  child: SizedBox(
+                if (widget.isSending)
+                  SizedBox(
                     width: 36,
                     height: 36,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         padding: EdgeInsets.zero,
-                        backgroundColor: Colors.black,
+                        backgroundColor: const Color(0xFFD83A3A),
                         shape: const CircleBorder(),
                         elevation: 0,
                       ),
-                      onPressed: (widget.isSending || !canSend)
-                          ? null
-                          : widget.onSend,
+                      onPressed: widget.onInterrupt,
                       child: const Icon(
-                        Icons.arrow_upward,
+                        Icons.stop_rounded,
                         size: 18,
                         color: Colors.white,
                       ),
                     ),
-                  ),
-                ),
-                // 麦克风和更多按钮（使用 Visibility）
-                Visibility(
-                  visible: !hasContent,
-                  maintainSize: false,
-                  maintainAnimation: false,
-                  maintainState: false,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (!kIsWeb && widget.onToggleListening != null)
-                        GestureDetector(
-                          onTap: widget.isSending
-                              ? null
-                              : widget.onToggleListening,
-                          onLongPressStart: widget.isSending
-                              ? null
-                              : (_) => widget.onStartListening?.call(),
-                          onLongPressEnd: widget.isSending
-                              ? null
-                              : (_) => widget.onStopListening?.call(),
-                          child: Icon(
-                            widget.isListening ? Icons.mic : Icons.mic_none,
-                            color: widget.isListening
-                                ? Colors.red
-                                : Colors.black54,
-                            size: 20,
-                          ),
+                  )
+                else ...[
+                  // 发送按钮（使用 Visibility）
+                  Visibility(
+                    visible: hasContent,
+                    maintainSize: false,
+                    maintainAnimation: false,
+                    maintainState: false,
+                    child: SizedBox(
+                      width: 36,
+                      height: 36,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          backgroundColor: Colors.black,
+                          shape: const CircleBorder(),
+                          elevation: 0,
                         ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        icon: const Icon(Icons.add, size: 20),
-                        onPressed: widget.isSending ? null : () {},
-                        tooltip: '更多',
-                        color: Colors.black54,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(
-                          minWidth: 32,
-                          minHeight: 32,
+                        onPressed: !canSend ? null : widget.onSend,
+                        child: const Icon(
+                          Icons.arrow_upward,
+                          size: 18,
+                          color: Colors.white,
                         ),
                       ),
-                    ],
+                    ),
                   ),
-                ),
+                  // 麦克风和更多按钮（使用 Visibility）
+                  Visibility(
+                    visible: !hasContent,
+                    maintainSize: false,
+                    maintainAnimation: false,
+                    maintainState: false,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (!kIsWeb && widget.onToggleListening != null)
+                          GestureDetector(
+                            onTap: widget.onToggleListening,
+                            onLongPressStart: (_) =>
+                                widget.onStartListening?.call(),
+                            onLongPressEnd: (_) =>
+                                widget.onStopListening?.call(),
+                            child: Icon(
+                              widget.isListening ? Icons.mic : Icons.mic_none,
+                              color: widget.isListening
+                                  ? Colors.red
+                                  : Colors.black54,
+                              size: 20,
+                            ),
+                          ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.add, size: 20),
+                          onPressed: () {},
+                          tooltip: '更多',
+                          color: Colors.black54,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 32,
+                            minHeight: 32,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

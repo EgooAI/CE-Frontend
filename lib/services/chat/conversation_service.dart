@@ -184,6 +184,8 @@ class ConversationService {
     final headers = {
       'Authorization': 'Bearer $token',
       'Content-Type': 'application/json',
+      'Accept': 'text/event-stream',
+      'X-Stream-Version': '2',
     };
     final body = json.encode({
       'role': 'user',
@@ -197,38 +199,46 @@ class ConversationService {
       final data = ev['data'];
 
       try {
-        if (eventName == 'user_message') {
-          // data should be a map representing a Message
-          yield StreamEvent(
-            type: 'user_message',
-            data: Message.fromJson(Map<String, dynamic>.from(data)),
-          );
-        } else if (eventName == 'progress') {
-          yield StreamEvent(type: 'progress', data: data);
-        } else if (eventName == 'content') {
-          // streaming content chunk
-          yield StreamEvent(type: 'content', data: data);
-        } else if (eventName == 'tool_call') {
-          yield StreamEvent(type: 'tool_call', data: data);
-        } else if (eventName == 'tool_result') {
-          yield StreamEvent(type: 'tool_result', data: data);
-        } else if (eventName == 'schedule_parsed') {
-          // AI 解析出的日程数据
-          yield StreamEvent(type: 'schedule_parsed', data: data);
-        } else if (eventName == 'done') {
-          // data is the final Message object
-          if (data is Map) {
+        switch (eventName) {
+          // v2 协议事件
+          case 'session_start':
+          case 'thinking_step':
+          case 'action_start':
+          case 'action_result':
+          case 'answer_delta':
+          case 'warning':
+          case 'schedule_parsed':
+          case 'final':
+          case 'error':
+            yield StreamEvent(type: eventName, data: data);
+            break;
+
+          // 旧协议事件（向后兼容）
+          case 'user_message':
             yield StreamEvent(
-              type: 'done',
-              data: Message.fromJson(Map<String, dynamic>.from(data)),
+              type: 'user_message',
+              data: Message.fromJson(Map<String, dynamic>.from(data as Map)),
             );
-          } else {
-            yield StreamEvent(type: 'done', data: data);
-          }
-        } else if (eventName == 'error') {
-          yield StreamEvent(type: 'error', data: data);
-        } else {
-          yield StreamEvent(type: 'message', data: data);
+            break;
+          case 'progress':
+          case 'content':
+          case 'tool_call':
+          case 'tool_result':
+            yield StreamEvent(type: eventName, data: data);
+            break;
+          case 'done':
+            if (data is Map) {
+              yield StreamEvent(
+                type: 'done',
+                data: Message.fromJson(Map<String, dynamic>.from(data)),
+              );
+            } else {
+              yield StreamEvent(type: 'done', data: data);
+            }
+            break;
+          default:
+            yield StreamEvent(type: 'message', data: data);
+            break;
         }
       } catch (e) {
         yield StreamEvent(

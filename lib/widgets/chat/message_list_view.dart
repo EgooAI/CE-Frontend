@@ -1,7 +1,12 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import '../../models/chat/conversation.dart';
 import 'message_bubble.dart';
+import 'session_divider.dart';
+import 'streaming_message_bubble.dart';
+import 'today_schedule_card.dart';
 import 'welcome_guide.dart';
 
 /// 聊天消息列表视图组件
@@ -32,6 +37,27 @@ class MessageListView extends StatefulWidget {
   /// 下拉刷新回调
   final Future<void> Function()? onRefresh;
 
+  /// 当前流式消息 ID（仅 assistant 临时气泡）
+  final String? activeStreamingMessageId;
+
+  /// 当前流式文本
+  final String activeStreamingText;
+
+  /// 是否展示流式回答气泡
+  final bool showStreamingBubble;
+
+  /// 是否展示思考文字
+  final bool showThinkingText;
+
+  /// 思考文字
+  final String thinkingText;
+
+  /// 查看全部日程
+  final VoidCallback? onTodaySummaryViewAll;
+
+  /// 让 AI 规划今天
+  final ValueChanged<Map<String, dynamic>>? onTodaySummaryAskAi;
+
   const MessageListView({
     super.key,
     required this.currentConversation,
@@ -41,6 +67,13 @@ class MessageListView extends StatefulWidget {
     required this.onExampleTap,
     required this.scrollController,
     this.onRefresh,
+    this.activeStreamingMessageId,
+    this.activeStreamingText = '',
+    this.showStreamingBubble = false,
+    this.showThinkingText = false,
+    this.thinkingText = '',
+    this.onTodaySummaryViewAll,
+    this.onTodaySummaryAskAi,
   });
 
   @override
@@ -86,7 +119,23 @@ class _MessageListViewState extends State<MessageListView> {
           itemCount: widget.messages.length,
           itemBuilder: (context, index) {
             final message = widget.messages[index];
+            final special = _buildSpecialMessage(message);
+            if (special != null) return special;
+
             final isUser = message.role == 'user';
+            final isActiveStreaming =
+                !isUser &&
+                widget.activeStreamingMessageId != null &&
+                message.id == widget.activeStreamingMessageId;
+
+            if (isActiveStreaming) {
+              return _ActiveStreamingMessage(
+                showStreamingBubble: widget.showStreamingBubble,
+                showThinkingText: widget.showThinkingText,
+                streamingText: widget.activeStreamingText,
+                thinkingText: widget.thinkingText,
+              );
+            }
             return MessageBubble(message: message, isUser: isUser);
           },
         ),
@@ -122,5 +171,64 @@ class _MessageListViewState extends State<MessageListView> {
       _lastScrollAt = null;
     }
     return false;
+  }
+
+  Widget? _buildSpecialMessage(Message message) {
+    if (message.metadata == null || message.metadata!.trim().isEmpty) {
+      return null;
+    }
+
+    try {
+      final decoded = jsonDecode(message.metadata!);
+      if (decoded is! Map<String, dynamic>) return null;
+      final type = decoded['localType']?.toString();
+
+      if (type == 'session_divider') {
+        return SessionDivider(label: decoded['label']?.toString() ?? '重新进入');
+      }
+
+      if (type == 'today_schedule_summary') {
+        return TodayScheduleCard(
+          payload: decoded,
+          onViewAll: widget.onTodaySummaryViewAll,
+          onAskAi: widget.onTodaySummaryAskAi == null
+              ? null
+              : () => widget.onTodaySummaryAskAi!(decoded),
+        );
+      }
+    } catch (_) {
+      return null;
+    }
+
+    return null;
+  }
+}
+
+class _ActiveStreamingMessage extends StatelessWidget {
+  const _ActiveStreamingMessage({
+    required this.showStreamingBubble,
+    required this.showThinkingText,
+    required this.streamingText,
+    required this.thinkingText,
+  });
+
+  final bool showStreamingBubble;
+  final bool showThinkingText;
+  final String streamingText;
+  final String thinkingText;
+
+  @override
+  Widget build(BuildContext context) {
+    if (showThinkingText) {
+      return ThinkingStatusText(
+        text: thinkingText.isEmpty ? '正在理解你的问题…' : thinkingText,
+      );
+    }
+
+    if (showStreamingBubble) {
+      return StreamingMessageBubble(text: streamingText, finished: false);
+    }
+
+    return const SizedBox.shrink();
   }
 }
