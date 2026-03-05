@@ -235,8 +235,8 @@ jobs:
 
       - name: Install ossutil
         run: |
-          curl -sL https://gosspublic.alicdn.com/ossutil/1.7.19/ossutil64 -o /usr/local/bin/ossutil
-          chmod +x /usr/local/bin/ossutil
+          # 使用官方安装脚本，自动适配版本和架构；-f 确保 HTTP 错误时直接失败
+          curl -fsSL https://gosspublic.alicdn.com/ossutil/install.sh | sudo bash
 
       - name: Upload to OSS
         env:
