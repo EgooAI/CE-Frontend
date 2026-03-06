@@ -10,7 +10,7 @@ env:
 jobs:
   build-ios:
     name: Build Unsigned IPA
-    runs-on: macos-latest
+    runs-on: macos-26
     timeout-minutes: 30
 
     steps:
@@ -18,7 +18,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── 2. 配置 Flutter ──────────────────────────────
+      # ── 2. 选择最新 Xcode（macos-26 自带，显式锁定）────────
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest
+
+      # ── 4. 配置 Flutter ──────────────────────────────────
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -28,7 +34,7 @@ jobs:
       - name: Flutter pub get
         run: flutter pub get
 
-      # ── 3. 构建 iOS（无签名）────────────────────────
+      # ── 5. 构建 iOS（无签名）────────────────────────
       - name: Build iOS (no-codesign)
         run: |
           flutter build ios --release \
@@ -39,7 +45,7 @@ jobs:
             --dart-define=XFYUN_ACCESS_KEY_ID=${{ secrets.XFYUN_ACCESS_KEY_ID }} \
             --dart-define=XFYUN_ACCESS_KEY_SECRET=${{ secrets.XFYUN_ACCESS_KEY_SECRET }}
 
-      # ── 4. 打包成 .ipa（无签名结构）─────────────────
+      # ── 6. 打包成 .ipa（无签名结构）─────────────────
       - name: Package unsigned IPA
         run: |
           mkdir -p Payload
