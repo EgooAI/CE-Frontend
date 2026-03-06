@@ -12,12 +12,13 @@ class ProcessStep {
     required this.type,
     required this.text,
     required this.status,
-  });
+  }) : startedAt = DateTime.now();
 
   final String stepId;
   final ProcessStepType type;
   String text;
   ProcessStepStatus status;
+  final DateTime startedAt;
 }
 
 class StreamMetrics {

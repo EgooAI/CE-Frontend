@@ -1071,41 +1071,57 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   void _onActionResult(Map<String, dynamic> data) {
     final summary = data['summary']?.toString() ?? '';
-    setState(() {
-      final session = _ensureStreamSession();
-      final stepId = data['stepId']?.toString();
-      ProcessStep? target;
-      if (stepId != null) {
-        for (final step in session.steps) {
-          if (step.stepId == stepId) {
-            target = step;
-            break;
-          }
+
+    // 找到对应 step（不修改状态，只读）
+    final session = _ensureStreamSession();
+    final stepId = data['stepId']?.toString();
+    ProcessStep? target;
+    if (stepId != null) {
+      for (final step in session.steps) {
+        if (step.stepId == stepId) {
+          target = step;
+          break;
         }
       }
-      target ??= session.steps.lastWhere(
-        (step) =>
-            step.type == ProcessStepType.action &&
-            step.status == ProcessStepStatus.pending,
-        orElse: () => ProcessStep(
-          stepId: stepId ?? _genStepId(),
-          type: ProcessStepType.action,
-          text: '执行工具',
-          status: ProcessStepStatus.pending,
-        ),
-      );
+    }
+    target ??= session.steps.lastWhere(
+      (step) =>
+          step.type == ProcessStepType.action &&
+          step.status == ProcessStepStatus.pending,
+      orElse: () => ProcessStep(
+        stepId: stepId ?? _genStepId(),
+        type: ProcessStepType.action,
+        text: '执行工具',
+        status: ProcessStepStatus.pending,
+      ),
+    );
+    if (!session.steps.contains(target)) {
+      session.steps.add(target);
+    }
 
-      if (!session.steps.contains(target)) {
-        session.steps.add(target);
-      }
+    // 保证 action 步骤最少显示 500ms
+    const minDwell = Duration(milliseconds: 500);
+    final elapsed = DateTime.now().difference(target.startedAt);
+    final delay = elapsed < minDwell ? minDwell - elapsed : Duration.zero;
 
-      target.status = ProcessStepStatus.done;
-      if (summary.isNotEmpty) {
-        target.text = '${target.text}  -  $summary';
-      }
-      session.phase = StreamPhase.acting;
-      _transientThinkingText = target.text;
-    });
+    void applyResult() {
+      if (!mounted) return;
+      setState(() {
+        target!.status = ProcessStepStatus.done;
+        if (summary.isNotEmpty) {
+          target.text = '${target.text}  -  $summary';
+        }
+        final s = _ensureStreamSession();
+        s.phase = StreamPhase.acting;
+        _transientThinkingText = target.text;
+      });
+    }
+
+    if (delay == Duration.zero) {
+      applyResult();
+    } else {
+      Future.delayed(delay, applyResult);
+    }
   }
 
   void _onScheduleParsed(Map<String, dynamic> data) {
