@@ -224,11 +224,13 @@ class AuthService {
   }
 
   /// 检查 refresh_token 是否已过期
+  /// 若本地未存储过期时间（如老版本升级），乐观返回 false，
+  /// 由服务端在实际刷新请求时给出最终判断。
   Future<bool> isRefreshTokenExpired() async {
     final prefs = await SharedPreferences.getInstance();
     final refreshExpiry = prefs.getInt(_refreshTokenExpiryKey);
 
-    if (refreshExpiry == null) return true;
+    if (refreshExpiry == null) return false;
 
     final now = DateTime.now().millisecondsSinceEpoch;
     return now >= refreshExpiry;
@@ -329,7 +331,8 @@ class AuthService {
   }
 
   /// 初始化认证状态
-  /// 启动时验证 token 有效性
+  /// 仅做本地校验，网络验证由 ApiClient 的 401 拦截器惰性处理，
+  /// 避免冷启动时因网络超时/服务不可达而误清除有效 token。
   Future<bool> initAuth() async {
     final token = await getToken();
     if (token == null) {
@@ -337,32 +340,28 @@ class AuthService {
       return false;
     }
 
-    // 设置 token 到 API 客户端
-    ApiClient.setToken(token);
-
-    // 检查是否需要刷新 token
-    if (await isTokenExpiringSoon()) {
-      print('AuthService: Token 即将过期，尝试刷新...');
-      try {
-        await refreshAccessToken();
-        return true;
-      } catch (e) {
-        print('AuthService: 刷新失败 - $e');
-        return false;
-      }
-    }
-
-    // 验证 token 有效性（调用后端接口）
-    try {
-      await getProfile();
-      print('AuthService: Token 验证成功');
-      return true;
-    } catch (e) {
-      print('AuthService: Token 验证失败 - $e');
-      // Token 无效，清空本地状态
+    // refresh_token 已确认过期 → 必须重新登录
+    if (await isRefreshTokenExpired()) {
+      print('AuthService: refresh_token 已过期，需要重新登录');
       await _clearLocalAuth();
       return false;
     }
+
+    // 设置 token 到 API 客户端
+    ApiClient.setToken(token);
+
+    // access_token 即将过期时尝试静默刷新；
+    // 失败不退出登录，由 ApiClient 的 401 拦截器在实际请求时处理
+    if (await isTokenExpiringSoon()) {
+      print('AuthService: Token 即将过期，尝试静默刷新...');
+      try {
+        await refreshAccessToken();
+      } catch (e) {
+        print('AuthService: 静默刷新失败 - $e，将由 ApiClient 拦截器处理');
+      }
+    }
+
+    return true;
   }
 
   Future<User> getProfile() async {

@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
@@ -266,7 +267,7 @@ class _MyAppState extends State<MyApp> {
         });
       }
 
-      // 如果没有缓存用户，再获取一次最新信息
+      // 如果没有缓存用户，尝试从网络获取一次
       if (cachedUser == null) {
         try {
           final user = await authService.getProfile();
@@ -277,9 +278,20 @@ class _MyAppState extends State<MyApp> {
               _isLoading = false;
             });
           }
+        } on DioException catch (e) {
+          // 仅在服务端明确返回 401 时才清除 token 并跳转登录页；
+          // 网络超时、服务不可达等情况不清除 token，下次启动可自动恢复
+          if (e.response?.statusCode == 401) {
+            await authService.logout();
+          }
+          if (mounted) {
+            setState(() {
+              _isLoggedIn = false;
+              _isLoading = false;
+            });
+          }
         } catch (e) {
-          // 如果获取用户信息失败且没有缓存，清除token并跳转到登录页
-          await authService.logout();
+          // 其他异常（非网络）：不清除 token，仅退回登录页
           if (mounted) {
             setState(() {
               _isLoggedIn = false;
