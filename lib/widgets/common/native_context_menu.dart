@@ -1,9 +1,7 @@
-import 'dart:async';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'unified_press.dart';
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 
 class NativeContextMenuItem {
   final String title;
@@ -21,7 +19,10 @@ class NativeContextMenuItem {
   });
 }
 
-/// 原生风格上下文菜单（iOS: CupertinoContextMenu；其他平台: PopupMenu）
+/// 原生风格上下文菜单
+/// iOS: CupertinoContextMenu（带预览动画）
+/// Android/Web: Material3 PopupMenuButton（AdaptiveContextMenu）
+/// Desktop: 额外支持右键触发
 class NativeContextMenu extends StatelessWidget {
   final Widget child;
   final List<NativeContextMenuItem> actions;
@@ -36,34 +37,37 @@ class NativeContextMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isIOS = !kIsWeb && Platform.isIOS;
+    final isDesktop =
+        !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
 
-    if (isIOS) {
-      return CupertinoContextMenu(
-        actions: actions
-            .map(
-              (item) => CupertinoContextMenuAction(
-                isDestructiveAction: item.isDestructive,
-                onPressed: () async {
-                  Navigator.pop(context);
-                  await item.onSelected();
-                },
-                child: _buildMenuItemLabel(item),
-              ),
-            )
-            .toList(),
-        child: child,
+    final adaptiveActions = actions
+        .map(
+          (item) => AdaptiveContextMenuAction(
+            title: item.title,
+            icon: item.icon,
+            isDestructive: item.isDestructive,
+            onPressed: () => item.onSelected(),
+          ),
+        )
+        .toList();
+
+    // 桌面端额外保留右键触发支持
+    if (isDesktop) {
+      return GestureDetector(
+        behavior: behavior,
+        onSecondaryTapDown: (details) =>
+            _showDesktopMenu(context, details.globalPosition),
+        child: AdaptiveContextMenu(actions: adaptiveActions, child: child),
       );
     }
 
-    return UnifiedPress(
-      behavior: behavior,
-      onActivate: (position) => _showMenu(context, position),
-      child: child,
-    );
+    return AdaptiveContextMenu(actions: adaptiveActions, child: child);
   }
 
-  Future<void> _showMenu(BuildContext context, Offset globalPosition) async {
+  Future<void> _showDesktopMenu(
+    BuildContext context,
+    Offset globalPosition,
+  ) async {
     final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
     final position = RelativeRect.fromLTRB(
       globalPosition.dx,
@@ -89,25 +93,17 @@ class NativeContextMenu extends StatelessWidget {
   }
 
   Widget _buildMenuItemLabel(NativeContextMenuItem item) {
-    final textStyle = item.isDestructive
-        ? const TextStyle(color: Colors.red, height: 1.0)
-        : const TextStyle(height: 1.0);
-
+    final color = item.isDestructive ? Colors.red : null;
     if (item.icon == null) {
-      return Text(item.title, style: textStyle);
+      return Text(item.title, style: TextStyle(color: color, height: 1.0));
     }
-
     return Row(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Icon(
-          item.icon,
-          size: 18,
-          color: item.iconColor ?? (item.isDestructive ? Colors.red : null),
-        ),
+        Icon(item.icon, size: 18, color: item.iconColor ?? color),
         const SizedBox(width: 8),
-        Text(item.title, style: textStyle),
+        Text(item.title, style: TextStyle(color: color, height: 1.0)),
       ],
     );
   }

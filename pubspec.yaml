@@ -54,6 +54,7 @@ dependencies:
   # 加密库（用于科大讯飞 API 签名）
   crypto: ^3.0.5
   flutter_slidable: ^4.0.3
+  adaptive_platform_ui: ^0.1.103
 
   # 图片选择器
   image_picker: ^1.1.2
