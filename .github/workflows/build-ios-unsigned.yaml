@@ -1,0 +1,57 @@
+name: Build iOS (Unsigned IPA)
+
+# 手动触发
+on:
+  workflow_dispatch:
+
+env:
+  FLUTTER_CHANNEL: "stable"
+
+jobs:
+  build-ios:
+    name: Build Unsigned IPA
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      # ── 1. 拉代码 ────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. 配置 Flutter ──────────────────────────────
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          cache: true
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      # ── 3. 构建 iOS（无签名）────────────────────────
+      - name: Build iOS (no-codesign)
+        run: |
+          flutter build ios --release \
+            --no-codesign \
+            --no-tree-shake-icons \
+            --dart-define=API_URL=${{ secrets.API_URL }} \
+            --dart-define=XFYUN_APP_ID=${{ secrets.XFYUN_APP_ID }} \
+            --dart-define=XFYUN_ACCESS_KEY_ID=${{ secrets.XFYUN_ACCESS_KEY_ID }} \
+            --dart-define=XFYUN_ACCESS_KEY_SECRET=${{ secrets.XFYUN_ACCESS_KEY_SECRET }}
+
+      # ── 4. 打包成 .ipa（无签名结构）─────────────────
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p Payload
+          cp -r build/ios/iphoneos/Runner.app Payload/
+          zip -r unsigned.ipa Payload
+          echo "✅ unsigned.ipa 打包完成"
+          ls -lh unsigned.ipa
+
+      # ── 5. 上传产物 ──────────────────────────────────
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-unsigned-ipa
+          path: unsigned.ipa
+          retention-days: 7
