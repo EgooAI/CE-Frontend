@@ -121,33 +121,25 @@ class _MyAppState extends State<MyApp> {
         '[UpdateCheck] current=$currentVersion latest=$latestVersion hasNew=$hasNewVersion debug=$kDebugMode',
       );
 
-      if (!hasNewVersion && !kDebugMode) {
-        print('[UpdateCheck] skip dialog: already latest in non-debug');
+      if (!hasNewVersion) {
+        print('[UpdateCheck] skip dialog: already latest');
         return;
       }
 
-      if (hasNewVersion) {
-        final suppressed = await _isUpdateDialogSuppressed(latestVersion);
-        if (suppressed) {
-          print('[UpdateCheck] skip dialog: suppressed until window expires');
-          return;
-        }
+      final suppressed = await _isUpdateDialogSuppressed(latestVersion);
+      if (suppressed) {
+        print('[UpdateCheck] skip dialog: suppressed until window expires');
+        return;
       }
 
-      final dialogLatestVersion = hasNewVersion
-          ? latestVersion
-          : '$latestVersion（预览）';
       _showNewVersionDialogWhenReady(
         currentVersion,
-        dialogLatestVersion,
-        suppressVersion: hasNewVersion ? latestVersion : null,
+        latestVersion,
+        suppressVersion: latestVersion,
       );
     } catch (e) {
       print('[UpdateCheck] latest version request failed: $e');
-      // 启动检查失败不影响主流程，debug 下兜底弹预览弹窗
-      if (kDebugMode) {
-        _showNewVersionDialogWhenReady('未知', '预览');
-      }
+      // 启动检查失败不影响主流程，静默忽略
     }
   }
 
