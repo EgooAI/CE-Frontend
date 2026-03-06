@@ -1398,6 +1398,21 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         _todaySummaryInserting) {
       return;
     }
+
+    // 如果末尾最近的非 today_schedule_summary 消息已经是 session_divider，不重复插入
+    Message? lastNonSummary;
+    for (var i = _messages.length - 1; i >= 0; i--) {
+      final meta = _parseMessageMetadata(_messages[i].metadata);
+      if (meta?['localType'] != 'today_schedule_summary') {
+        lastNonSummary = _messages[i];
+        break;
+      }
+    }
+    if (lastNonSummary != null) {
+      final meta = _parseMessageMetadata(lastNonSummary.metadata);
+      if (meta?['localType'] == 'session_divider') return;
+    }
+
     _todaySummaryInserting = true;
 
     try {
@@ -1560,9 +1575,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   }
 
   String _formatSessionDividerLabel(DateTime date) {
-    final hh = date.hour.toString().padLeft(2, '0');
-    final mm = date.minute.toString().padLeft(2, '0');
-    return '${date.month}月${date.day}日 $hh:$mm · 重新进入';
+    return '';
   }
 
   String _formatScheduleTime(Schedule schedule) {

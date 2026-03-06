@@ -8,6 +8,7 @@ class SessionDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lineColor = const Color(0x669E9E9E);
+    final hasLabel = label.trim().isNotEmpty;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Row(
@@ -22,17 +23,18 @@ class SessionDivider extends StatelessWidget {
               ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 11,
-                color: Color(0xFF9E9E9E),
-                fontWeight: FontWeight.w500,
+          if (hasLabel)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Color(0xFF9E9E9E),
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
-          ),
           Expanded(
             child: Container(
               height: 0.5,
