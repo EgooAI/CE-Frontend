@@ -89,3 +89,5 @@ app.*.map.json
 !readme.md
 docs/**
 .github/instructions/default.instructions.md
+chrono-release.jks
+chrono-release.jks.b64

@@ -12,6 +12,7 @@ env:
 #   构建参数：  API_URL / XFYUN_APP_ID / XFYUN_ACCESS_KEY_ID / XFYUN_ACCESS_KEY_SECRET
 #   阿里云 OSS：OSS_ENDPOINT / OSS_BUCKET / OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET
 #   通知：      WECHAT_WORK_WEBHOOK
+#   Android 签名：ANDROID_KEYSTORE_B64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD
 
 jobs:
   # ====================================================
@@ -45,7 +46,17 @@ jobs:
           TODAY=$(date +%Y-%m-%d)
 
           # 取最近一个 tag 到 HEAD 之间的 commit 信息
-          PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+          # 如果 HEAD 本身已打了 tag（发布流程常见），则用倒数第二个 tag 作为起点
+          LATEST_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+          LATEST_TAG_COMMIT=$(git rev-list -n 1 "$LATEST_TAG" 2>/dev/null)
+          HEAD_COMMIT=$(git rev-parse HEAD)
+
+          if [ "$LATEST_TAG_COMMIT" = "$HEAD_COMMIT" ]; then
+            # HEAD 已打 tag，用上一个 tag 作为比较起点
+            PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed -n '2p')
+          else
+            PREVIOUS_TAG="$LATEST_TAG"
+          fi
 
           if [ -z "$PREVIOUS_TAG" ]; then
             CONTENT="首次发布"
@@ -113,6 +124,19 @@ jobs:
           org.gradle.caching=true
           org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+UseParallelGC
           android.enableR8.fullMode=false
+          EOF
+
+      - name: Decode Android Keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_B64 }}" | base64 --decode > android/app/chrono-release.jks
+
+      - name: Create key.properties
+        run: |
+          cat > android/key.properties <<'EOF'
+          storeFile=chrono-release.jks
+          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
           EOF
 
       # 绕过 Cargokit 在 CI 构建时下载 Rust 目标失败的问题
