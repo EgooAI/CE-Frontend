@@ -33,7 +33,7 @@ class CalendarScheduleList extends StatelessWidget {
   final Set<String> expandedScheduleIds;
   final bool use24HourFormat;
   final VoidCallback onCreateSchedule;
-  final Future<void> Function() onDailyTaskUpdated;
+  final void Function(DailyTask updatedTask) onDailyTaskUpdated;
   final void Function(DailyTask task) onDailyTaskDetails;
   final void Function(String scheduleId) onToggleScheduleExpanded;
   final void Function(Schedule schedule, String newStatus) onStatusChanged;
@@ -109,8 +109,8 @@ class CalendarScheduleList extends StatelessWidget {
                 task: task,
                 use24HourFormat: use24HourFormat,
                 showInfo: false,
-                onTaskUpdated: (_) async {
-                  await onDailyTaskUpdated();
+                onTaskUpdated: (updatedTask) {
+                  onDailyTaskUpdated(updatedTask);
                 },
                 onDetailsTap: () => onDailyTaskDetails(task),
               ),

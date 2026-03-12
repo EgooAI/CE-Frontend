@@ -519,6 +519,20 @@ class _CalendarPageState extends State<CalendarPage> {
     );
   }
 
+  // 日常任务打卡/取消打卡后本地更新状态（避免 reload 缓存覆盖）
+  void _onDailyTaskUpdated(DailyTask updatedTask) {
+    setState(() {
+      final index = _dailyTasks.indexWhere((t) => t.id == updatedTask.id);
+      if (index >= 0) {
+        _dailyTasks[index] = updatedTask;
+        _scheduleUpdateCount++; // 触发日历红点/绿条重新计算
+      }
+    });
+    // 后台刷新仓储缓存，确保日常页下次加载时也能看到最新打卡状态
+    // 与 daily_page.dart 的 onTaskUpdated 保持一致
+    _dailyTaskRepository.refreshDailyTasks(status: 'active').ignore();
+  }
+
   // 显示日常任务详情
   void _showDailyTaskDetails(DailyTask task) {
     // 暂时显示简单提示，未来可以实现完整的详情页
@@ -793,7 +807,7 @@ class _CalendarPageState extends State<CalendarPage> {
                     expandedScheduleIds: _expandedScheduleIds,
                     use24HourFormat: _use24HourFormat,
                     onCreateSchedule: _showCreateDialog,
-                    onDailyTaskUpdated: _loadSchedules,
+                    onDailyTaskUpdated: _onDailyTaskUpdated,
                     onDailyTaskDetails: _showDailyTaskDetails,
                     onToggleScheduleExpanded: _toggleScheduleExpanded,
                     onStatusChanged: _handleStatusChange,

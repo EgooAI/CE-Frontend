@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../models/daily/daily_task.dart';
+import '../../../repositories/daily_task_repository.dart';
 import '../../../services/daily/daily_task_service.dart';
 import 'daily_record_detail_page.dart';
 
@@ -12,33 +13,61 @@ class DailyRecordsPage extends StatefulWidget {
 }
 
 class _DailyRecordsPageState extends State<DailyRecordsPage> {
+  final DailyTaskRepository _repo = DailyTaskRepository();
   final DailyTaskService _service = DailyTaskService();
-  late Future<List<DailyTask>> _tasksFuture;
-  late Future<Map<String, DailyTaskStats>> _statsFuture;
+
+  bool _isLoading = true;
+  String? _errorMessage;
+  List<DailyTask> _tasks = [];
+  Map<String, DailyTaskStats> _statsMap = {};
 
   @override
   void initState() {
     super.initState();
-    _tasksFuture = _service.getDailyTasks();
-    _statsFuture = _loadAllStats();
+    _load(forceRefresh: false);
   }
 
-  Future<Map<String, DailyTaskStats>> _loadAllStats() async {
+  Future<void> _load({required bool forceRefresh}) async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
     try {
-      final tasks = await _tasksFuture;
-      final statsMap = <String, DailyTaskStats>{};
-      for (final task in tasks) {
-        try {
-          final stats = await _service.getDailyTaskStats(task.id);
-          statsMap[task.id] = stats;
-        } catch (e) {
-          debugPrint('Failed to load stats for task ${task.id}: $e');
-        }
-      }
-      return statsMap;
+      // 同时拉 active 和 paused，合并后展示全部任务
+      final results = await Future.wait([
+        _repo.getDailyTasks(status: 'active', forceRefresh: forceRefresh),
+        _repo.getDailyTasks(status: 'paused', forceRefresh: forceRefresh),
+      ]);
+      final tasks = [...results[0], ...results[1]];
+
+      // 并发加载统计信息
+      final statsEntries = await Future.wait(
+        tasks.map((task) async {
+          try {
+            final stats = await _service.getDailyTaskStats(task.id);
+            return MapEntry(task.id, stats);
+          } catch (_) {
+            return null;
+          }
+        }),
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _tasks = tasks;
+        _statsMap = Map.fromEntries(
+          statsEntries.whereType<MapEntry<String, DailyTaskStats>>(),
+        );
+        _isLoading = false;
+      });
     } catch (e) {
-      debugPrint('Failed to load all stats: $e');
-      return {};
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = e.toString().replaceAll('Exception: ', '');
+        _isLoading = false;
+      });
     }
   }
 
@@ -46,76 +75,72 @@ class _DailyRecordsPageState extends State<DailyRecordsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('日常记录'), elevation: 0),
-      body: FutureBuilder<List<DailyTask>>(
-        future: _tasksFuture,
-        builder: (context, tasksSnapshot) {
-          if (tasksSnapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body: _buildBody(),
+    );
+  }
 
-          if (tasksSnapshot.hasError) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error, size: 48, color: Colors.red),
-                  const SizedBox(height: 16),
-                  Text('加载失败: ${tasksSnapshot.error}'),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () {
-                      setState(() {
-                        _tasksFuture = _service.getDailyTasks();
-                        _statsFuture = _loadAllStats();
-                      });
-                    },
-                    child: const Text('重新加载'),
-                  ),
-                ],
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error, size: 48, color: Colors.red),
+            const SizedBox(height: 16),
+            Text('加载失败: $_errorMessage'),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => _load(forceRefresh: true),
+              child: const Text('重新加载'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_tasks.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: () => _load(forceRefresh: true),
+        child: ListView(
+          children: [
+            SizedBox(
+              height: MediaQuery.of(context).size.height * 0.6,
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.checklist, size: 48, color: Colors.grey[400]),
+                    const SizedBox(height: 16),
+                    Text('暂无日常任务', style: TextStyle(color: Colors.grey[600])),
+                  ],
+                ),
               ),
-            );
-          }
+            ),
+          ],
+        ),
+      );
+    }
 
-          final tasks = tasksSnapshot.data ?? [];
-          if (tasks.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.checklist, size: 48, color: Colors.grey[400]),
-                  const SizedBox(height: 16),
-                  Text('暂无日常任务', style: TextStyle(color: Colors.grey[600])),
-                ],
-              ),
-            );
-          }
-
-          return FutureBuilder<Map<String, DailyTaskStats>>(
-            future: _statsFuture,
-            builder: (context, statsSnapshot) {
-              final statsMap = statsSnapshot.data ?? {};
-
-              return ListView.builder(
-                padding: const EdgeInsets.all(12),
-                itemCount: tasks.length,
-                itemBuilder: (context, index) {
-                  final task = tasks[index];
-                  final stats = statsMap[task.id];
-
-                  return _DailyTaskCard(
-                    task: task,
-                    stats: stats,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              DailyRecordDetailPage(task: task),
-                        ),
-                      );
-                    },
-                  );
-                },
+    return RefreshIndicator(
+      onRefresh: () => _load(forceRefresh: true),
+      child: ListView.builder(
+        padding: const EdgeInsets.all(12),
+        itemCount: _tasks.length,
+        itemBuilder: (context, index) {
+          final task = _tasks[index];
+          return _DailyTaskCard(
+            task: task,
+            stats: _statsMap[task.id],
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => DailyRecordDetailPage(task: task),
+                ),
               );
             },
           );
