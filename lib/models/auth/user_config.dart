@@ -10,8 +10,7 @@ class UserConfig {
   final bool use24HourFormat;
 
   UserConfig({
-    // 默认值为 false，保证应用不会因为 null 崩溃
-    this.dailyScheduleDisplayInCalendar = false,
+    this.dailyScheduleDisplayInCalendar = true,
     this.use24HourFormat = false,
   });
 
@@ -27,7 +26,7 @@ class UserConfig {
       // 使用 ?? 运算符，如果字段不存在或为 null，则回退到 false
       dailyScheduleDisplayInCalendar: dailyDisplayValue is bool
           ? dailyDisplayValue
-          : false,
+          : true,
       use24HourFormat: timeFormatValue is bool ? timeFormatValue : false,
     );
   }

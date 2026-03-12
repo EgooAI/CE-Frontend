@@ -424,6 +424,11 @@ class AuthService {
   Future<void> updateUserConfig(UserConfig config) async {
     try {
       await ApiClient.instance.put('/profile/config', data: config.toJson());
+      // 更新 SharedPreferences 中缓存的 user，确保其他页面读到最新 config
+      final cachedUser = await getUser();
+      if (cachedUser != null) {
+        await _saveUser(cachedUser.copyWith(config: config));
+      }
     } on DioException catch (e) {
       throw Exception(e.message ?? '更新用户配置失败');
     }

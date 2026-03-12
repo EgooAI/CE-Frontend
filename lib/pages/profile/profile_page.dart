@@ -25,6 +25,14 @@ class _ProfilePageState extends State<ProfilePage> {
     _loadAppVersion();
   }
 
+  @override
+  void didUpdateWidget(ProfilePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialUser != widget.initialUser) {
+      setState(() => user = widget.initialUser);
+    }
+  }
+
   Future<void> _loadAppVersion() async {
     try {
       final packageInfo = await PackageInfo.fromPlatform();

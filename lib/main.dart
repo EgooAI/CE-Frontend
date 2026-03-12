@@ -257,10 +257,20 @@ class _MyAppState extends State<MyApp> {
           _user = cachedUser;
           _isLoading = false;
         });
+        // 有缓存时：后台静默刷新，更新 config 等最新数据
+        authService
+            .getProfile()
+            .then((user) {
+              if (mounted) setState(() => _user = user);
+            })
+            .catchError((_) {
+              /* 静默失败，保持缓存 */
+            });
       }
 
-      // 如果没有缓存用户，尝试从网络获取一次
+      // 无论有无缓存，都后台拉一次最新 profile（秒开 + 数据保鲜）
       if (cachedUser == null) {
+        // 无缓存：必须等待网络返回再进入主页
         try {
           final user = await authService.getProfile();
           if (mounted) {
@@ -452,6 +462,24 @@ class _MyAppState extends State<MyApp> {
             horizontal: 80,
             vertical: 24,
           ),
+        ),
+        dialogTheme: DialogThemeData(
+          backgroundColor: Colors.white,
+          elevation: 10,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(16)),
+          ),
+          titleTextStyle: const TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF1F2329),
+          ),
+          contentTextStyle: const TextStyle(
+            fontSize: 14,
+            color: Color(0xFF4B5563),
+            height: 1.5,
+          ),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
         ),
         bottomNavigationBarTheme: const BottomNavigationBarThemeData(
           backgroundColor: Colors.white,
