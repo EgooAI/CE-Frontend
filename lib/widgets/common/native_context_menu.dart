@@ -1,4 +1,5 @@
 import 'dart:io' show Platform;
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
@@ -19,10 +20,10 @@ class NativeContextMenuItem {
   });
 }
 
-/// 原生风格上下文菜单
-/// iOS: CupertinoContextMenu（带预览动画）
-/// Android/Web: Material3 PopupMenuButton（AdaptiveContextMenu）
-/// Desktop: 额外支持右键触发
+/// 原生风格上下文菜单（长按触发）
+/// iOS: CupertinoContextMenu，child 限高避免全屏遮挡菜单
+/// Android/Web: AdaptiveContextMenu（Material3）
+/// Desktop: 右键触发 Material PopupMenu
 class NativeContextMenu extends StatelessWidget {
   final Widget child;
   final List<NativeContextMenuItem> actions;
@@ -37,6 +38,7 @@ class NativeContextMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isIOS = !kIsWeb && Platform.isIOS;
     final isDesktop =
         !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
 
@@ -51,7 +53,36 @@ class NativeContextMenu extends StatelessWidget {
         )
         .toList();
 
-    // 桌面端额外保留右键触发支持
+    // ── iOS：CupertinoContextMenu，限制 child 高度避免全屏遮挡菜单 ──
+    if (isIOS) {
+      return CupertinoContextMenu(
+        actions: actions
+            .map(
+              (item) => CupertinoContextMenuAction(
+                isDestructiveAction: item.isDestructive,
+                trailingIcon: item.icon,
+                onPressed: () {
+                  Navigator.pop(context);
+                  item.onSelected();
+                },
+                child: Text(item.title),
+              ),
+            )
+            .toList(),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width - 32,
+            maxHeight: 160,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: child,
+          ),
+        ),
+      );
+    }
+
+    // ── 桌面端：额外保留右键触发 ──
     if (isDesktop) {
       return GestureDetector(
         behavior: behavior,
@@ -61,6 +92,7 @@ class NativeContextMenu extends StatelessWidget {
       );
     }
 
+    // ── Android / Web ──
     return AdaptiveContextMenu(actions: adaptiveActions, child: child);
   }
 
