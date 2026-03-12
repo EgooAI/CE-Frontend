@@ -24,6 +24,7 @@ import '../../widgets/chat/chat_input_bar.dart';
 import '../../widgets/chat/image_preview_widget.dart';
 import '../../widgets/chat/message_list_view.dart';
 import '../../widgets/chat/schedule_confirm_card.dart';
+import '../../widgets/schedule/create_schedule_bottom_sheet.dart';
 import '../../services/chat/voice_input_service.dart';
 import '../../utils/app_keys.dart';
 
@@ -452,13 +453,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         });
 
         await _loadCurrentConversationDetail();
+        _insertTodaySummaryEntryIfNeeded();
       }
 
       // 后台强刷，获取最新数据并动态更新
       _refreshConversationsInBackground();
-      if (cachedConversations != null) {
-        _insertTodaySummaryEntryIfNeeded();
-      }
       return;
     }
 
@@ -479,7 +478,6 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       if (_conversations.isNotEmpty && _currentConversation != null) {
         await _loadCurrentConversationDetail(forceRefresh: forceRefresh);
       }
-      _insertTodaySummaryEntryIfNeeded();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -579,7 +577,6 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       if (closeDrawer) {
         Navigator.pop(context);
       }
-      _insertTodaySummaryEntryIfNeeded();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -1722,6 +1719,77 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     setState(() => _pendingScheduleParsed = null);
   }
 
+  void _showEditParsedSchedule() {
+    final parsed = _pendingScheduleParsed;
+    if (parsed == null) return;
+
+    // 用已有解析逻辑将 Map 转为 Schedule（自动处理 HH:mm 等原始格式）
+    final prefilled = _buildScheduleFromParsed(parsed);
+
+    showCreateScheduleBottomSheet(
+      context,
+      existingSchedule: prefilled,
+      onSave: (editedSchedule) async {
+        setState(() => _isCreatingSchedule = true);
+        try {
+          await runCrudWithForceRefresh(
+            action: () => _scheduleRepository.createSchedule(editedSchedule),
+            forceRefresh: _forceRefreshSchedulesCache,
+          );
+          if (!mounted) return;
+          setState(() => _pendingScheduleParsed = null);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ 日程创建成功'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+          final shouldNavigate = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('日程已创建'),
+              content: const Text('是否前往日历查看？'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('留在聊天'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('查看日历'),
+                ),
+              ],
+            ),
+          );
+          if (shouldNavigate == true && mounted) {
+            final mainState = mainPageKey.currentState;
+            if (mainState != null && mainState.mounted) {
+              Future.microtask(() {
+                try {
+                  (mainState as dynamic).navigateToScheduleDate(
+                    editedSchedule.startTime,
+                  );
+                } catch (e) {
+                  debugPrint('切换到日历页面失败: $e');
+                }
+              });
+            }
+          }
+        } catch (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ 创建日程失败: $e'),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        } finally {
+          if (mounted) setState(() => _isCreatingSchedule = false);
+        }
+      },
+    );
+  }
+
   Schedule _buildScheduleFromParsed(Map<String, dynamic> parsed) {
     DateTime? parseDateOnly(dynamic value) {
       if (value == null) return null;
@@ -1895,10 +1963,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _todaySummaryInsertedThisForeground = false;
-      _insertTodaySummaryEntryIfNeeded();
-    }
+    // 分割线只在冷启动时插入，后台切前台不重新插入
   }
 
   @override
@@ -2012,6 +2077,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                             creating: _isCreatingSchedule,
                             onConfirm: _confirmCreateParsedSchedule,
                             onCancel: _dismissParsedSchedule,
+                            onEdit: _showEditParsedSchedule,
                           ),
                   ),
                 ),
