@@ -332,7 +332,7 @@ class _ScheduleCardState extends State<ScheduleCard> {
 
   @override
   Widget build(BuildContext context) {
-    final card = NativeContextMenu(
+    final cardContent = NativeContextMenu(
       actions: [
         NativeContextMenuItem(
           title: '进行中',
@@ -495,7 +495,7 @@ class _ScheduleCardState extends State<ScheduleCard> {
 
     final slidableCard = widget.onDelete != null
         ? Slidable(
-            key: ValueKey(widget.schedule.id),
+            key: ValueKey('${widget.schedule.id}_${widget.isExpanded}'),
             endActionPane: ActionPane(
               motion: const DrawerMotion(),
               extentRatio: 0.20,
@@ -528,25 +528,30 @@ class _ScheduleCardState extends State<ScheduleCard> {
                 ),
               ],
             ),
-            child: card,
+            child: cardContent,
           )
-        : card;
+        : cardContent;
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x14000000),
-            blurRadius: 6,
-            offset: Offset(0, 2),
-          ),
-        ],
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      alignment: Alignment.topCenter,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x14000000),
+              blurRadius: 6,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: slidableCard,
       ),
-      clipBehavior: Clip.antiAlias,
-      child: slidableCard,
     );
   }
 
